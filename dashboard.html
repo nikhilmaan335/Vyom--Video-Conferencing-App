@@ -9,28 +9,29 @@
 <body class="dashboard-page">
     <div class="dashboard-layout">
         <aside class="dashboard-sidebar">
+            <button id="dashboard-sidebar-close" class="dashboard-sidebar-close" type="button" aria-label="Close navigation">✕</button>
             <div class="sidebar-branding">
                 <img src="logo.png" alt="Vyom Logo" class="sidebar-logo">
                 <div class="sidebar-brand-text">
-                    <strong>MeetPro</strong>
-                    <span>Team meetings made easy</span>
+                    <strong>Vyom</strong>
+                    <span>Real-time meetings and teams</span>
                 </div>
             </div>
+
             <nav class="sidebar-nav">
                 <a href="#" class="nav-link active" data-target="dashboard">Dashboard</a>
                 <a href="#" class="nav-link" data-target="meetings">Meetings</a>
-                <a href="#" class="nav-link" data-target="calendar">Calendar</a>
-                <a href="#" class="nav-link" data-target="recordings">Recordings</a>
-                <a href="#" class="nav-link" data-target="chats">Chats</a>
-                <a href="#" class="nav-link" data-target="people">People</a>
+                <a href="#" class="nav-link" data-target="teams">Teams</a>
+                <a href="#" class="nav-link" data-target="history">History</a>
                 <a href="#" class="nav-link" data-target="settings">Settings</a>
             </nav>
+
             <div class="sidebar-footer">
                 <div class="profile-preview">
                     <img src="logo.png" alt="User Avatar" class="profile-avatar">
                     <div>
-                        <p class="profile-name">Gaurav Kumar</p>
-                        <p class="profile-email">gaurav.kumar@example.com</p>
+                        <p class="profile-name" id="dashboard-user-name">Loading...</p>
+                        <p class="profile-email" id="dashboard-user-email">Loading...</p>
                     </div>
                 </div>
                 <button id="dashboard-sign-out-button" class="secondary-button sidebar-signout-button" type="button">Sign Out</button>
@@ -41,10 +42,11 @@
         <main class="dashboard-content">
             <header class="dashboard-header-row">
                 <div>
-                    <p class="dashboard-label">Meetings</p>
+                    <p class="dashboard-label">Workspace</p>
                     <h1 class="dashboard-title">Create, join and manage your meetings</h1>
                 </div>
                 <div class="header-actions">
+                    <button id="dashboard-menu-button" class="icon-button dashboard-menu-button" type="button" aria-label="Open navigation">☰</button>
                     <div class="search-field">
                         <input type="search" id="meeting-search" placeholder="Search meetings">
                         <button id="meeting-search-button" class="icon-button" type="button" aria-label="Search meetings">🔍</button>
@@ -54,64 +56,30 @@
                 </div>
             </header>
 
+            <section class="dashboard-overview" id="dashboard-overview">
+                <article class="overview-card">
+                    <span>Teams</span>
+                    <strong id="dashboard-team-count">0</strong>
+                </article>
+                <article class="overview-card">
+                    <span>Upcoming</span>
+                    <strong id="dashboard-upcoming-count">0</strong>
+                </article>
+                <article class="overview-card">
+                    <span>History</span>
+                    <strong id="dashboard-history-count">0</strong>
+                </article>
+            </section>
+
             <section class="upcoming-section">
                 <div class="section-header">
                     <div>
                         <h2>Upcoming Meetings</h2>
                         <p>Manage your planned sessions at a glance.</p>
                     </div>
-                    <button class="secondary-button" type="button">View Calendar</button>
+                    <button id="dashboard-view-calendar-button" class="secondary-button" type="button">View Calendar</button>
                 </div>
-                <div class="upcoming-cards">
-                    <article class="meeting-card">
-                        <div class="meeting-card-top">
-                            <span class="meeting-icon blue">📅</span>
-                            <span class="meeting-badge">Team Alpha</span>
-                        </div>
-                        <h3>Project Kickoff</h3>
-                        <p class="meeting-description">Align the team and kickoff the new sprint.</p>
-                        <div class="meeting-meta">
-                            <span>20 May 2025</span>
-                            <span>10:00 AM - 11:00 AM</span>
-                        </div>
-                        <div class="meeting-footer">
-                            <div class="avatar-stack">👤👤👤+3</div>
-                            <button class="secondary-button small-button" type="button">Join</button>
-                        </div>
-                    </article>
-                    <article class="meeting-card">
-                        <div class="meeting-card-top">
-                            <span class="meeting-icon green">👥</span>
-                            <span class="meeting-badge">UI/UX Team</span>
-                        </div>
-                        <h3>Design Review</h3>
-                        <p class="meeting-description">Review the latest design updates and feedback.</p>
-                        <div class="meeting-meta">
-                            <span>20 May 2025</span>
-                            <span>02:30 PM - 03:30 PM</span>
-                        </div>
-                        <div class="meeting-footer">
-                            <div class="avatar-stack">👤👤+2</div>
-                            <button class="secondary-button small-button" type="button">Join</button>
-                        </div>
-                    </article>
-                    <article class="meeting-card">
-                        <div class="meeting-card-top">
-                            <span class="meeting-icon purple">📊</span>
-                            <span class="meeting-badge">All Hands</span>
-                        </div>
-                        <h3>Weekly Sync</h3>
-                        <p class="meeting-description">Share updates and sync priorities with the team.</p>
-                        <div class="meeting-meta">
-                            <span>21 May 2025</span>
-                            <span>11:00 AM - 12:00 PM</span>
-                        </div>
-                        <div class="meeting-footer">
-                            <div class="avatar-stack">👤👤👤+5</div>
-                            <button class="secondary-button small-button" type="button">Join</button>
-                        </div>
-                    </article>
-                </div>
+                <div class="upcoming-cards" id="upcoming-meetings-list"></div>
             </section>
 
             <section class="history-panel">
@@ -126,44 +94,21 @@
                                     <th>Meeting</th>
                                     <th>Team / Host</th>
                                     <th>Date & Time</th>
-                                    <th>Duration</th>
+                                    <th>Status</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                <tr>
-                                    <td>Sprint Planning</td>
-                                    <td>Team Alpha</td>
-                                    <td>19 May 2025, 10:00 AM</td>
-                                    <td>45 min</td>
-                                    <td><button class="icon-button small-button">▶</button></td>
-                                </tr>
-                                <tr>
-                                    <td>Client Call</td>
-                                    <td>Marketing Team</td>
-                                    <td>18 May 2025, 04:00 PM</td>
-                                    <td>30 min</td>
-                                    <td><button class="icon-button small-button">▶</button></td>
-                                </tr>
-                                <tr>
-                                    <td>Product Roadmap</td>
-                                    <td>Product Team</td>
-                                    <td>17 May 2025, 11:00 AM</td>
-                                    <td>60 min</td>
-                                    <td><button class="icon-button small-button">▶</button></td>
-                                </tr>
-                                <tr>
-                                    <td>1:1 Meeting with Manager</td>
-                                    <td>Gaurav Kumar</td>
-                                    <td>16 May 2025, 03:30 PM</td>
-                                    <td>30 min</td>
-                                    <td><button class="icon-button small-button">▶</button></td>
-                                </tr>
-                            </tbody>
+                            <tbody id="meeting-history-body"></tbody>
                         </table>
-                        <a href="#" class="link-button">View All Meetings</a>
+                        <a href="#" class="link-button" id="view-all-meetings-link">View All Meetings</a>
                     </div>
+
                     <aside class="quick-panel">
+                        <div class="panel-header">
+                            <h2>Your Teams</h2>
+                        </div>
+                        <div class="team-list" id="team-list"></div>
+
                         <div class="panel-header">
                             <h2>Join a Meeting</h2>
                         </div>
@@ -171,6 +116,7 @@
                             <input type="text" id="meeting-code" placeholder="Enter meeting code or link">
                             <button id="join-meeting-button" class="primary-button" type="button">Join</button>
                         </div>
+
                         <div class="panel-header">
                             <h2>Quick Tips</h2>
                         </div>
@@ -184,6 +130,8 @@
             </section>
         </main>
     </div>
+
+    <div class="dashboard-backdrop" id="dashboard-sidebar-backdrop" aria-hidden="true"></div>
 
     <script src="app.js"></script>
 </body>
