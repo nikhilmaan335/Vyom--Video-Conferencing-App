@@ -51,6 +51,29 @@
         </div>
     </main>
 
+    <div class="social-auth-modal is-hidden" id="social-auth-modal" aria-hidden="true">
+        <div class="social-auth-modal__card" role="dialog" aria-modal="true" aria-labelledby="social-auth-title">
+            <button class="social-auth-modal__close" id="social-auth-close" type="button" aria-label="Close social sign-in">✕</button>
+            <div class="social-auth-modal__header">
+                <p class="social-auth-modal__eyebrow">Continue with</p>
+                <h2 id="social-auth-title">Social sign-in</h2>
+                <p id="social-auth-description">Enter your account details to continue.</p>
+            </div>
+            <form class="social-auth-form" id="social-auth-form">
+                <label for="social-auth-email">Email</label>
+                <input type="email" id="social-auth-email" placeholder="Enter your email" required>
+
+                <label for="social-auth-name">Display name</label>
+                <input type="text" id="social-auth-name" placeholder="Enter your name" required>
+
+                <div class="social-auth-actions">
+                    <button class="secondary-button" id="social-auth-cancel" type="button">Cancel</button>
+                    <button class="primary-button" type="submit">Continue</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vyom Meeting Room</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="meeting-room-page">
+    <header class="meeting-room-header">
+        <div class="meeting-branding">
+            <img src="logo.png" alt="Vyom Logo" class="meeting-brand-logo">
+            <div>
+                <strong id="meeting-room-title">Meeting Room</strong>
+                <span id="meeting-room-subtitle">Loading meeting details...</span>
+            </div>
+        </div>
+
+        <div class="meeting-header-actions">
+            <button id="meeting-copy-link-button" class="secondary-button meeting-header-button" type="button">Copy Link</button>
+            <button id="meeting-fullscreen-button" class="icon-button meeting-header-button" type="button" aria-label="Toggle fullscreen">⛶</button>
+            <span class="meeting-timer" id="meeting-timer">45:12</span>
+            <button id="theme-toggle" class="theme-toggle-button" type="button" aria-label="Toggle dark mode">🌙</button>
+        </div>
+    </header>
+
+    <main class="meeting-room-shell">
+        <aside class="meeting-drawer meeting-drawer--left" id="participants-drawer" aria-hidden="true">
+            <div class="meeting-drawer__header">
+                <div>
+                    <h2>Participants</h2>
+                    <p id="participants-drawer-count">0 people in room</p>
+                </div>
+                <button class="mini-action-button" id="participants-drawer-close" type="button">✕</button>
+            </div>
+            <div class="meeting-drawer__body">
+                <div class="drawer-search-row">
+                    <input type="search" id="participants-search" placeholder="Search participants">
+                </div>
+                <div class="drawer-section">
+                    <h3>In this meeting</h3>
+                    <div class="drawer-list" id="participants-drawer-list"></div>
+                </div>
+                <div class="drawer-section">
+                    <h3>Room details</h3>
+                    <div class="drawer-detail-card">
+                        <strong id="participants-room-title">Meeting Room</strong>
+                        <span id="participants-room-code">—</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <section class="participant-stack participant-stack--left" id="left-participant-stack" aria-label="Left participants"></section>
+
+        <section class="speaker-stage">
+            <div class="speaker-stage__frame">
+                <span class="speaker-stage__badge">Active Speaker</span>
+                <video id="active-speaker-video" class="speaker-stage__video" autoplay playsinline muted></video>
+                <img id="active-speaker-avatar" class="speaker-stage__avatar" src="logo.png" alt="Active speaker avatar">
+                <div class="speaker-stage__overlay">
+                    <div>
+                        <h1 id="active-speaker-name">Waiting for participants</h1>
+                        <p id="active-speaker-status">Join the room to start the conversation.</p>
+                    </div>
+                    <div class="speaker-stage__actions">
+                        <button class="mini-action-button" id="speaker-mic-indicator" type="button">🎙️</button>
+                        <button class="mini-action-button" id="speaker-camera-indicator" type="button">📷</button>
+                        <button class="mini-action-button" id="speaker-settings-button" type="button">⚙️</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="participant-stack participant-stack--right" id="right-participant-stack" aria-label="Right participants"></section>
+
+        <aside class="meeting-drawer meeting-drawer--right" id="chat-drawer" aria-hidden="true">
+            <div class="meeting-drawer__header">
+                <div>
+                    <h2>Chat</h2>
+                    <p>Room messages and updates</p>
+                </div>
+                <button class="mini-action-button" id="chat-drawer-close" type="button">✕</button>
+            </div>
+            <div class="meeting-drawer__body">
+                <div class="drawer-section drawer-section--grow">
+                    <div class="chat-message-list" id="chat-message-list"></div>
+                </div>
+                <form class="chat-composer" id="chat-composer">
+                    <textarea id="chat-message-input" rows="3" placeholder="Type a message"></textarea>
+                    <button class="primary-button" type="submit">Send</button>
+                </form>
+            </div>
+        </aside>
+
+        <aside class="meeting-device-panel" id="device-panel" aria-hidden="true">
+            <div class="meeting-drawer__header">
+                <div>
+                    <h2>Devices</h2>
+                    <p>Choose your mic and camera</p>
+                </div>
+                <button class="mini-action-button" id="device-panel-close" type="button">✕</button>
+            </div>
+            <div class="meeting-drawer__body">
+                <div class="drawer-section">
+                    <h3>Microphone</h3>
+                    <select id="microphone-device-select"></select>
+                </div>
+                <div class="drawer-section">
+                    <h3>Camera</h3>
+                    <select id="camera-device-select"></select>
+                </div>
+                <div class="drawer-section">
+                    <h3>Speaker / output</h3>
+                    <select id="speaker-output-device-select"></select>
+                    <p class="speaker-output-note">Choose where meeting audio plays: laptop speakers, headphones, or another output device.</p>
+                </div>
+                <div class="drawer-section">
+                    <button class="secondary-button" id="refresh-device-list-button" type="button">Refresh devices</button>
+                </div>
+            </div>
+        </aside>
+
+        <aside class="meeting-drawer meeting-drawer--right meeting-more-panel" id="more-panel" aria-hidden="true">
+            <div class="meeting-drawer__header">
+                <div>
+                    <h2>More</h2>
+                    <p>Sharing tools and meeting extras</p>
+                </div>
+                <button class="mini-action-button" id="more-panel-close" type="button">✕</button>
+            </div>
+            <div class="meeting-drawer__body">
+                <div class="drawer-section">
+                    <h3>Screen share</h3>
+                    <div class="tool-grid">
+                        <button class="tool-card" id="share-screen-option" type="button">
+                            <strong>Screen</strong>
+                            <span>Share the entire display</span>
+                        </button>
+                        <button class="tool-card" id="share-window-option" type="button">
+                            <strong>Window</strong>
+                            <span>Share one app window</span>
+                        </button>
+                        <button class="tool-card" id="share-tab-option" type="button">
+                            <strong>Tab</strong>
+                            <span>Share a browser tab</span>
+                        </button>
+                        <button class="tool-card tool-card--danger" id="stop-share-option" type="button">
+                            <strong>Stop share</strong>
+                            <span>End the current share</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="drawer-section">
+                    <h3>Collaborate</h3>
+                    <div class="tool-grid">
+                        <button class="tool-card" id="open-whiteboard-button" type="button">
+                            <strong>Whiteboard</strong>
+                            <span>Draw together live</span>
+                        </button>
+                        <button class="tool-card" id="share-image-button" type="button">
+                            <strong>Image</strong>
+                            <span>Share screenshots or photos</span>
+                        </button>
+                        <button class="tool-card" id="share-file-button" type="button">
+                            <strong>File</strong>
+                            <span>Send docs and assets</span>
+                        </button>
+                        <button class="tool-card" id="ai-suggestions-button" type="button">
+                            <strong>AI suggestions</strong>
+                            <span>Get smart next steps</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="drawer-section">
+                    <h3>AI suggestions</h3>
+                    <div class="ai-suggestions-list" id="ai-suggestions-list">
+                        <div class="drawer-detail-card">Tap "AI suggestions" to generate prompts.</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <section class="meeting-whiteboard-panel" id="whiteboard-panel" aria-hidden="true">
+            <div class="meeting-whiteboard-panel__header">
+                <div>
+                    <h2>Whiteboard</h2>
+                    <p id="whiteboard-status">Ready to draw with the room.</p>
+                </div>
+                <div class="whiteboard-toolbar">
+                    <div class="whiteboard-toolbar__colors" aria-label="Whiteboard colors">
+                        <button class="whiteboard-color is-active" type="button" data-whiteboard-color="#3af6ff" aria-label="Cyan"></button>
+                        <button class="whiteboard-color" type="button" data-whiteboard-color="#8b5cf6" aria-label="Purple"></button>
+                        <button class="whiteboard-color" type="button" data-whiteboard-color="#22c55e" aria-label="Green"></button>
+                        <button class="whiteboard-color" type="button" data-whiteboard-color="#f97316" aria-label="Orange"></button>
+                        <button class="whiteboard-color" type="button" data-whiteboard-color="#ffffff" aria-label="White"></button>
+                    </div>
+                    <label class="whiteboard-size-control">
+                        <span>Size</span>
+                        <input id="whiteboard-size" type="range" min="2" max="14" value="4">
+                    </label>
+                    <button class="secondary-button" id="whiteboard-clear-button" type="button">Clear</button>
+                    <button class="mini-action-button" id="whiteboard-close-button" type="button">✕</button>
+                </div>
+            </div>
+            <canvas id="whiteboard-canvas"></canvas>
+        </section>
+
+        <input class="is-hidden" id="image-share-input" type="file" accept="image/*">
+        <input class="is-hidden" id="file-share-input" type="file">
+
+        <section class="meeting-control-bar" aria-label="Meeting controls">
+            <button class="control-button" id="mute-toggle-button" type="button">
+                <span>🎙️</span>
+                <strong>Mute</strong>
+            </button>
+            <button class="control-button" id="camera-toggle-button" type="button">
+                <span>📷</span>
+                <strong>Video</strong>
+            </button>
+            <button class="control-button" id="screen-share-button" type="button">
+                <span>🖥️</span>
+                <strong>Share</strong>
+            </button>
+            <button class="control-button" id="participants-button" type="button">
+                <span>👥</span>
+                <strong>People</strong>
+                <span class="control-badge" id="participants-count-badge">0</span>
+            </button>
+            <button class="control-button" id="chat-button" type="button">
+                <span>💬</span>
+                <strong>Chat</strong>
+                <span class="control-badge" id="chat-unread-badge">0</span>
+            </button>
+            <button class="control-button" id="raise-hand-button" type="button">
+                <span>✋</span>
+                <strong>Hand</strong>
+            </button>
+            <button class="control-button" id="more-button" type="button">
+                <span>⋯</span>
+                <strong>More</strong>
+            </button>
+            <button class="control-button control-button--danger" id="leave-meeting-button" type="button">
+                <span>⏻</span>
+                <strong>End</strong>
+            </button>
+        </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
