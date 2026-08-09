@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vyom Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dashboard-page">
+    <div class="dashboard-layout">
+        <aside class="dashboard-sidebar">
+            <div class="sidebar-branding">
+                <img src="logo.png" alt="Vyom Logo" class="sidebar-logo">
+                <div class="sidebar-brand-text">
+                    <strong>MeetPro</strong>
+                    <span>Team meetings made easy</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-link active" data-target="dashboard">Dashboard</a>
+                <a href="#" class="nav-link" data-target="meetings">Meetings</a>
+                <a href="#" class="nav-link" data-target="calendar">Calendar</a>
+                <a href="#" class="nav-link" data-target="recordings">Recordings</a>
+                <a href="#" class="nav-link" data-target="chats">Chats</a>
+                <a href="#" class="nav-link" data-target="people">People</a>
+                <a href="#" class="nav-link" data-target="settings">Settings</a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="profile-preview">
+                    <img src="logo.png" alt="User Avatar" class="profile-avatar">
+                    <div>
+                        <p class="profile-name">Gaurav Kumar</p>
+                        <p class="profile-email">gaurav.kumar@example.com</p>
+                    </div>
+                </div>
+                <button id="dashboard-sign-out-button" class="secondary-button sidebar-signout-button" type="button">Sign Out</button>
+                <a href="#" class="support-link">Help & Support</a>
+            </div>
+        </aside>
+
+        <main class="dashboard-content">
+            <header class="dashboard-header-row">
+                <div>
+                    <p class="dashboard-label">Meetings</p>
+                    <h1 class="dashboard-title">Create, join and manage your meetings</h1>
+                </div>
+                <div class="header-actions">
+                    <div class="search-field">
+                        <input type="search" id="meeting-search" placeholder="Search meetings">
+                        <button id="meeting-search-button" class="icon-button" type="button" aria-label="Search meetings">🔍</button>
+                    </div>
+                    <button id="theme-toggle" class="icon-button" type="button" aria-label="Toggle dark mode">🌙</button>
+                    <button id="new-meeting-button" class="primary-button" type="button">New Meeting</button>
+                </div>
+            </header>
+
+            <section class="upcoming-section">
+                <div class="section-header">
+                    <div>
+                        <h2>Upcoming Meetings</h2>
+                        <p>Manage your planned sessions at a glance.</p>
+                    </div>
+                    <button class="secondary-button" type="button">View Calendar</button>
+                </div>
+                <div class="upcoming-cards">
+                    <article class="meeting-card">
+                        <div class="meeting-card-top">
+                            <span class="meeting-icon blue">📅</span>
+                            <span class="meeting-badge">Team Alpha</span>
+                        </div>
+                        <h3>Project Kickoff</h3>
+                        <p class="meeting-description">Align the team and kickoff the new sprint.</p>
+                        <div class="meeting-meta">
+                            <span>20 May 2025</span>
+                            <span>10:00 AM - 11:00 AM</span>
+                        </div>
+                        <div class="meeting-footer">
+                            <div class="avatar-stack">👤👤👤+3</div>
+                            <button class="secondary-button small-button" type="button">Join</button>
+                        </div>
+                    </article>
+                    <article class="meeting-card">
+                        <div class="meeting-card-top">
+                            <span class="meeting-icon green">👥</span>
+                            <span class="meeting-badge">UI/UX Team</span>
+                        </div>
+                        <h3>Design Review</h3>
+                        <p class="meeting-description">Review the latest design updates and feedback.</p>
+                        <div class="meeting-meta">
+                            <span>20 May 2025</span>
+                            <span>02:30 PM - 03:30 PM</span>
+                        </div>
+                        <div class="meeting-footer">
+                            <div class="avatar-stack">👤👤+2</div>
+                            <button class="secondary-button small-button" type="button">Join</button>
+                        </div>
+                    </article>
+                    <article class="meeting-card">
+                        <div class="meeting-card-top">
+                            <span class="meeting-icon purple">📊</span>
+                            <span class="meeting-badge">All Hands</span>
+                        </div>
+                        <h3>Weekly Sync</h3>
+                        <p class="meeting-description">Share updates and sync priorities with the team.</p>
+                        <div class="meeting-meta">
+                            <span>21 May 2025</span>
+                            <span>11:00 AM - 12:00 PM</span>
+                        </div>
+                        <div class="meeting-footer">
+                            <div class="avatar-stack">👤👤👤+5</div>
+                            <button class="secondary-button small-button" type="button">Join</button>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="history-panel">
+                <div class="history-grid">
+                    <div class="history-list">
+                        <div class="panel-header">
+                            <h2>Meeting History</h2>
+                        </div>
+                        <table class="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Meeting</th>
+                                    <th>Team / Host</th>
+                                    <th>Date & Time</th>
+                                    <th>Duration</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Sprint Planning</td>
+                                    <td>Team Alpha</td>
+                                    <td>19 May 2025, 10:00 AM</td>
+                                    <td>45 min</td>
+                                    <td><button class="icon-button small-button">▶</button></td>
+                                </tr>
+                                <tr>
+                                    <td>Client Call</td>
+                                    <td>Marketing Team</td>
+                                    <td>18 May 2025, 04:00 PM</td>
+                                    <td>30 min</td>
+                                    <td><button class="icon-button small-button">▶</button></td>
+                                </tr>
+                                <tr>
+                                    <td>Product Roadmap</td>
+                                    <td>Product Team</td>
+                                    <td>17 May 2025, 11:00 AM</td>
+                                    <td>60 min</td>
+                                    <td><button class="icon-button small-button">▶</button></td>
+                                </tr>
+                                <tr>
+                                    <td>1:1 Meeting with Manager</td>
+                                    <td>Gaurav Kumar</td>
+                                    <td>16 May 2025, 03:30 PM</td>
+                                    <td>30 min</td>
+                                    <td><button class="icon-button small-button">▶</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <a href="#" class="link-button">View All Meetings</a>
+                    </div>
+                    <aside class="quick-panel">
+                        <div class="panel-header">
+                            <h2>Join a Meeting</h2>
+                        </div>
+                        <div class="join-card">
+                            <input type="text" id="meeting-code" placeholder="Enter meeting code or link">
+                            <button id="join-meeting-button" class="primary-button" type="button">Join</button>
+                        </div>
+                        <div class="panel-header">
+                            <h2>Quick Tips</h2>
+                        </div>
+                        <ul class="quick-tips">
+                            <li>Schedule meetings in advance to keep everyone informed.</li>
+                            <li>Share meeting links with participants beforehand.</li>
+                            <li>Record important meetings for future reference.</li>
+                        </ul>
+                    </aside>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
