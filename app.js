@@ -568,151 +568,7 @@ function renderMeetingHistory(rows) {
     });
 }
 
-async function loadDashboardPage(user) {
-    const data = await requestJson('/api/dashboard');
 
-    const userName = document.getElementById('dashboard-user-name');
-    const userEmail = document.getElementById('dashboard-user-email');
-    const sidebar = document.querySelector('.dashboard-sidebar');
-    const sidebarBackdrop = document.getElementById('dashboard-sidebar-backdrop');
-    const menuButton = document.getElementById('dashboard-menu-button');
-    const sidebarCloseButton = document.getElementById('dashboard-sidebar-close');
-    if (userName) {
-        userName.textContent = data.profile.name;
-    }
-    if (userEmail) {
-        userEmail.textContent = data.profile.email;
-    }
-
-    renderOverview(data);
-    renderTeamList(data.teams);
-    renderUpcomingMeetings(data.upcomingMeetings);
-    renderMeetingHistory(data.meetingHistory);
-
-    const signOutButton = document.getElementById('dashboard-sign-out-button');
-    if (signOutButton) {
-        signOutButton.addEventListener('click', handleSignOut);
-    }
-
-    const searchButton = document.getElementById('meeting-search-button');
-    const searchInput = document.getElementById('meeting-search');
-    if (searchButton && searchInput) {
-        searchButton.addEventListener('click', () => {
-            const query = searchInput.value.trim().toLowerCase();
-            if (!query) {
-                renderUpcomingMeetings(data.upcomingMeetings);
-                return;
-            }
-
-            const filtered = data.upcomingMeetings.filter((meeting) =>
-                [meeting.title, meeting.teamName, meeting.roomCode, meeting.description]
-                    .join(' ')
-                    .toLowerCase()
-                    .includes(query)
-            );
-
-            renderUpcomingMeetings(filtered);
-        });
-
-        searchInput.addEventListener('input', () => {
-            if (!searchInput.value.trim()) {
-                renderUpcomingMeetings(data.upcomingMeetings);
-            }
-        });
-    }
-
-    const newMeetingButton = document.getElementById('new-meeting-button');
-    if (newMeetingButton) {
-        newMeetingButton.addEventListener('click', async () => {
-            const title = prompt('Meeting title', 'Instant Meeting') || 'Instant Meeting';
-            const response = await requestJson('/api/meetings', {
-                method: 'POST',
-                body: {
-                    title
-                }
-            });
-
-            await requestJson(`/api/meetings/${encodeURIComponent(response.meeting.roomCode)}/join`, {
-                method: 'POST'
-            });
-            redirectToMeeting(response.meeting.roomCode);
-        });
-    }
-
-    const joinMeetingButton = document.getElementById('join-meeting-button');
-    const meetingCodeInput = document.getElementById('meeting-code');
-    if (joinMeetingButton && meetingCodeInput) {
-        joinMeetingButton.addEventListener('click', async () => {
-            const roomCode = meetingCodeInput.value.trim();
-            if (!roomCode) {
-                alert('Please enter a meeting code or link.');
-                return;
-            }
-
-            await requestJson(`/api/meetings/${encodeURIComponent(roomCode)}/join`, { method: 'POST' });
-            redirectToMeeting(roomCode);
-        });
-    }
-
-    const viewCalendarButton = document.getElementById('dashboard-view-calendar-button');
-    if (viewCalendarButton) {
-        viewCalendarButton.addEventListener('click', () => {
-            alert('Calendar view is ready for the next update.');
-        });
-    }
-
-    const viewAllMeetingsLink = document.getElementById('view-all-meetings-link');
-    if (viewAllMeetingsLink) {
-        viewAllMeetingsLink.addEventListener('click', (event) => {
-            event.preventDefault();
-            alert('Full meeting archive can be added next.');
-        });
-    }
-
-    document.querySelectorAll('.sidebar-nav .nav-link').forEach((link) => {
-        link.addEventListener('click', (event) => {
-            event.preventDefault();
-            document.querySelectorAll('.sidebar-nav .nav-link').forEach((item) => item.classList.remove('active'));
-            link.classList.add('active');
-            const target = link.dataset.target;
-            if (target && target !== 'dashboard') {
-                alert(`Opening ${target}...`);
-            }
-            if (window.innerWidth <= 760) {
-                sidebar?.classList.remove('dashboard-sidebar--open');
-                sidebarBackdrop?.classList.remove('dashboard-sidebar-backdrop--open');
-                sidebarBackdrop?.setAttribute('aria-hidden', 'true');
-            }
-        });
-    });
-
-    function toggleSidebar(open) {
-        if (!sidebar || !sidebarBackdrop) {
-            return;
-        }
-
-        sidebar.classList.toggle('dashboard-sidebar--open', open);
-        sidebarBackdrop.classList.toggle('dashboard-sidebar-backdrop--open', open);
-        sidebarBackdrop.setAttribute('aria-hidden', String(!open));
-        if (menuButton) {
-            menuButton.textContent = open ? '✕' : '☰';
-            menuButton.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
-            menuButton.setAttribute('title', open ? 'Close navigation' : 'Open navigation');
-        }
-    }
-
-    menuButton?.addEventListener('click', () => {
-        toggleSidebar(!sidebar?.classList.contains('dashboard-sidebar--open'));
-    });
-
-    sidebarBackdrop?.addEventListener('click', () => toggleSidebar(false));
-    sidebarCloseButton?.addEventListener('click', () => toggleSidebar(false));
-    window.addEventListener('resize', () => {
-        if (window.innerWidth > 760) {
-            toggleSidebar(false);
-        }
-    });
-}
 
 function getParticipantKey(participant) {
     return participant.socketId || participant.userId || participant.email || participant.name;
@@ -2447,6 +2303,438 @@ async function loadMeetingPage(user) {
     renderMeetingState();
 }
 
+async function loadDashboardPage(user) {
+    let dashboardData = await requestJson('/api/dashboard');
+    let currentWorkspaceView = 'dashboard';
+
+    const userName = document.getElementById('dashboard-user-name');
+    const userEmail = document.getElementById('dashboard-user-email');
+    const sidebar = document.querySelector('.dashboard-sidebar');
+    const sidebarBackdrop = document.getElementById('dashboard-sidebar-backdrop');
+    const menuButton = document.getElementById('dashboard-menu-button');
+    const sidebarCloseButton = document.getElementById('dashboard-sidebar-close');
+    const dashboardTitle = document.querySelector('.dashboard-title');
+    const dashboardLabel = document.querySelector('.dashboard-label');
+    const dashboardOverview = document.getElementById('dashboard-overview');
+    const upcomingSection = document.querySelector('.upcoming-section');
+    const historyPanel = document.querySelector('.history-panel');
+
+    function ensureWorkspacePanel() {
+        let panel = document.getElementById('dashboard-workspace-panel');
+        if (!panel) {
+            panel = document.createElement('section');
+            panel.id = 'dashboard-workspace-panel';
+            panel.className = 'upcoming-section';
+            panel.style.display = 'none';
+            document.querySelector('.dashboard-content')?.insertBefore(panel, dashboardOverview?.nextSibling || null);
+        }
+        return panel;
+    }
+
+    const workspacePanel = ensureWorkspacePanel();
+
+    function showWorkspaceMessage(message) {
+        const banner = workspacePanel?.querySelector('[data-workspace-banner]');
+        if (banner) {
+            banner.textContent = message;
+        }
+    }
+
+    async function refreshDashboardData() {
+        dashboardData = await requestJson('/api/dashboard');
+        renderOverview(dashboardData);
+        renderTeamList(dashboardData.teams);
+        renderUpcomingMeetings(dashboardData.upcomingMeetings);
+        renderMeetingHistory(dashboardData.meetingHistory);
+    }
+
+    async function joinRoomAndRedirect(roomCode) {
+        await requestJson(`/api/meetings/${encodeURIComponent(roomCode)}/join`, { method: 'POST' });
+        redirectToMeeting(roomCode);
+    }
+
+    function renderMeetingsWorkspace() {
+        if (!workspacePanel) {
+            return;
+        }
+
+        workspacePanel.innerHTML = `
+            <div class="section-header"><div><h2>Meetings Workspace</h2><p>Schedule a session or jump into an active room.</p></div></div>
+            <div class="empty-state-card" data-workspace-banner>Create your next meeting in one step.</div>
+            <form id="dashboard-workspace-meeting-form" class="join-card" style="margin-top:14px;">
+                <input type="text" id="workspace-meeting-title" placeholder="Meeting title" required>
+                <input type="text" id="workspace-meeting-description" placeholder="Description (optional)">
+                <select id="workspace-meeting-team" class="workspace-select">
+                    <option value="">No team</option>
+                    ${dashboardData.teams.map((team) => `<option value="${escapeHtml(team.id)}">${escapeHtml(team.name)}</option>`).join('')}
+                </select>
+                <input type="datetime-local" id="workspace-meeting-time">
+                <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:var(--muted);"><input type="checkbox" id="workspace-meeting-auto-join" checked>Join immediately after creating</label>
+                <button type="submit" class="primary-button">Schedule Meeting</button>
+            </form>
+            <div class="panel-header" style="margin-top:24px;"><h2>Upcoming Queue</h2></div>
+            <div class="upcoming-cards" id="workspace-upcoming-list"></div>
+        `;
+
+        const upcomingList = document.getElementById('workspace-upcoming-list');
+        if (upcomingList) {
+            upcomingList.innerHTML = dashboardData.upcomingMeetings.length
+                ? dashboardData.upcomingMeetings.map((meeting, index) => `
+                    <article class="meeting-card">
+                        <div class="meeting-card-top">
+                            <span class="meeting-icon ${['blue', 'green', 'purple'][index % 3]}">📅</span>
+                            <span class="meeting-badge">${escapeHtml(meeting.teamName)}</span>
+                        </div>
+                        <h3>${escapeHtml(meeting.title)}</h3>
+                        <p class="meeting-description">${escapeHtml(meeting.description || 'Ready to start.')}</p>
+                        <div class="meeting-meta"><span>${formatDateTime(meeting.scheduledAt)}</span><span>Room: ${escapeHtml(meeting.roomCode)}</span></div>
+                        <button class="secondary-button small-button" type="button" data-room-code="${escapeHtml(meeting.roomCode)}">Join</button>
+                    </article>
+                `).join('')
+                : '<div class="empty-state-card">No upcoming meetings yet.</div>';
+
+            upcomingList.querySelectorAll('[data-room-code]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    await joinRoomAndRedirect(button.dataset.roomCode);
+                });
+            });
+        }
+
+        document.getElementById('dashboard-workspace-meeting-form')?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const title = document.getElementById('workspace-meeting-title')?.value.trim();
+            const description = document.getElementById('workspace-meeting-description')?.value.trim() || '';
+            const teamId = document.getElementById('workspace-meeting-team')?.value || null;
+            const scheduledLocal = document.getElementById('workspace-meeting-time')?.value;
+            const autoJoin = document.getElementById('workspace-meeting-auto-join')?.checked;
+
+            if (!title) {
+                showWorkspaceMessage('Meeting title is required.');
+                return;
+            }
+
+            const response = await requestJson('/api/meetings', {
+                method: 'POST',
+                body: {
+                    title,
+                    description,
+                    teamId,
+                    scheduledAt: scheduledLocal ? new Date(scheduledLocal).toISOString() : new Date().toISOString()
+                }
+            });
+
+            if (autoJoin) {
+                await joinRoomAndRedirect(response.meeting.roomCode);
+                return;
+            }
+
+            showWorkspaceMessage('Meeting created successfully.');
+            await refreshDashboardData();
+            renderMeetingsWorkspace();
+        });
+    }
+
+    function renderTeamsWorkspace() {
+        if (!workspacePanel) {
+            return;
+        }
+
+        workspacePanel.innerHTML = `
+            <div class="section-header"><div><h2>Teams Workspace</h2><p>Create and organize teams for focused collaboration.</p></div></div>
+            <div class="empty-state-card" data-workspace-banner>Create a team to group meetings and members.</div>
+            <form id="dashboard-workspace-team-form" class="join-card" style="margin-top:14px;">
+                <input type="text" id="workspace-team-name" placeholder="Team name" required>
+                <input type="text" id="workspace-team-description" placeholder="Team description">
+                <button type="submit" class="primary-button">Create Team</button>
+            </form>
+            <div class="panel-header" style="margin-top:24px;"><h2>Your Teams</h2></div>
+            <div class="team-list" id="workspace-team-list"></div>
+        `;
+
+        const list = document.getElementById('workspace-team-list');
+        if (list) {
+            list.innerHTML = dashboardData.teams.length
+                ? dashboardData.teams.map((team) => `
+                    <article class="team-card">
+                        <strong>${escapeHtml(team.name)}</strong>
+                        <span>${escapeHtml(team.description || 'No description')}</span>
+                        <small>${team.meetingCount} meetings</small>
+                    </article>
+                `).join('')
+                : '<div class="empty-state-card">No teams yet.</div>';
+        }
+
+        document.getElementById('dashboard-workspace-team-form')?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const name = document.getElementById('workspace-team-name')?.value.trim();
+            const description = document.getElementById('workspace-team-description')?.value.trim() || '';
+            if (!name) {
+                showWorkspaceMessage('Team name is required.');
+                return;
+            }
+
+            await requestJson('/api/teams', {
+                method: 'POST',
+                body: { name, description }
+            });
+
+            showWorkspaceMessage('Team created successfully.');
+            await refreshDashboardData();
+            renderTeamsWorkspace();
+        });
+    }
+
+    function renderHistoryWorkspace() {
+        if (!workspacePanel) {
+            return;
+        }
+
+        workspacePanel.innerHTML = `
+            <div class="section-header"><div><h2>Meeting History Workspace</h2><p>Review outcomes and relaunch previous rooms.</p></div></div>
+            <div class="empty-state-card" data-workspace-banner>Click relaunch to re-enter a previous room.</div>
+            <div class="history-list" style="margin-top:14px;">
+                <table class="history-table">
+                    <thead><tr><th>Meeting</th><th>Team</th><th>Ended</th><th>Duration</th><th>Action</th></tr></thead>
+                    <tbody id="workspace-history-body"></tbody>
+                </table>
+            </div>
+        `;
+
+        const body = document.getElementById('workspace-history-body');
+        if (!body) {
+            return;
+        }
+
+        body.innerHTML = dashboardData.meetingHistory.length
+            ? dashboardData.meetingHistory.map((meeting) => `
+                <tr>
+                    <td>${escapeHtml(meeting.title)}</td>
+                    <td>${escapeHtml(meeting.teamName)}</td>
+                    <td>${formatDateTime(meeting.endedAt || meeting.startedAt || meeting.scheduledAt)}</td>
+                    <td>${formatMeetingDuration(meeting.startedAt, meeting.endedAt)}</td>
+                    <td><button class="secondary-button small-button" type="button" data-room-code="${escapeHtml(meeting.roomCode)}">Relaunch</button></td>
+                </tr>
+            `).join('')
+            : '<tr><td colspan="5">No history yet.</td></tr>';
+
+        body.querySelectorAll('[data-room-code]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                await joinRoomAndRedirect(button.dataset.roomCode);
+            });
+        });
+    }
+
+    function renderSettingsWorkspace() {
+        if (!workspacePanel) {
+            return;
+        }
+
+        const compactEnabled = localStorage.getItem('vyomDashboardCompactView') === 'true';
+        const autoJoinEnabled = localStorage.getItem('vyomDashboardAutoJoin') !== 'false';
+
+        workspacePanel.innerHTML = `
+            <div class="section-header"><div><h2>Workspace Settings</h2><p>Customize your dashboard behavior.</p></div></div>
+            <div class="empty-state-card" data-workspace-banner>Preferences are saved in your browser.</div>
+            <div class="join-card" style="margin-top:14px;">
+                <label style="display:flex; gap:8px; align-items:center; font-size:14px; color:var(--text);"><input type="checkbox" id="workspace-compact-toggle" ${compactEnabled ? 'checked' : ''}>Compact dashboard cards</label>
+                <label style="display:flex; gap:8px; align-items:center; font-size:14px; color:var(--text);"><input type="checkbox" id="workspace-auto-join-toggle" ${autoJoinEnabled ? 'checked' : ''}>Auto-join when using New Meeting</label>
+                <button id="workspace-theme-toggle" class="secondary-button" type="button">Toggle Theme</button>
+            </div>
+        `;
+
+        document.getElementById('workspace-compact-toggle')?.addEventListener('change', (event) => {
+            const enabled = Boolean(event.target.checked);
+            localStorage.setItem('vyomDashboardCompactView', String(enabled));
+            document.body.classList.toggle('dashboard-compact', enabled);
+            showWorkspaceMessage('Compact view preference saved.');
+        });
+
+        document.getElementById('workspace-auto-join-toggle')?.addEventListener('change', (event) => {
+            localStorage.setItem('vyomDashboardAutoJoin', String(Boolean(event.target.checked)));
+            showWorkspaceMessage('New meeting auto-join preference saved.');
+        });
+
+        document.getElementById('workspace-theme-toggle')?.addEventListener('click', () => {
+            document.getElementById('theme-toggle')?.click();
+            showWorkspaceMessage('Theme updated.');
+        });
+    }
+
+    function applyWorkspaceView(view) {
+        currentWorkspaceView = view;
+        const showBase = view === 'dashboard';
+
+        if (dashboardOverview) {
+            dashboardOverview.style.display = showBase ? '' : 'none';
+        }
+        if (upcomingSection) {
+            upcomingSection.style.display = showBase ? '' : 'none';
+        }
+        if (historyPanel) {
+            historyPanel.style.display = showBase ? '' : 'none';
+        }
+        if (workspacePanel) {
+            workspacePanel.style.display = showBase ? 'none' : '';
+        }
+
+        if (dashboardTitle) {
+            dashboardTitle.textContent = showBase
+                ? 'Create, join and manage your meetings'
+                : `${view.charAt(0).toUpperCase()}${view.slice(1)} workspace`;
+        }
+        if (dashboardLabel) {
+            dashboardLabel.textContent = showBase ? 'Workspace' : 'Focused View';
+        }
+
+        if (view === 'meetings') {
+            renderMeetingsWorkspace();
+        } else if (view === 'teams') {
+            renderTeamsWorkspace();
+        } else if (view === 'history') {
+            renderHistoryWorkspace();
+        } else if (view === 'settings') {
+            renderSettingsWorkspace();
+        }
+    }
+
+    if (userName) {
+        userName.textContent = dashboardData.profile.name;
+    }
+    if (userEmail) {
+        userEmail.textContent = dashboardData.profile.email;
+    }
+
+    renderOverview(dashboardData);
+    renderTeamList(dashboardData.teams);
+    renderUpcomingMeetings(dashboardData.upcomingMeetings);
+    renderMeetingHistory(dashboardData.meetingHistory);
+
+    if (localStorage.getItem('vyomDashboardCompactView') === 'true') {
+        document.body.classList.add('dashboard-compact');
+    }
+
+    document.getElementById('dashboard-sign-out-button')?.addEventListener('click', handleSignOut);
+
+    const searchButton = document.getElementById('meeting-search-button');
+    const searchInput = document.getElementById('meeting-search');
+    if (searchButton && searchInput) {
+        searchButton.addEventListener('click', () => {
+            const query = searchInput.value.trim().toLowerCase();
+            if (!query) {
+                renderUpcomingMeetings(dashboardData.upcomingMeetings);
+                renderMeetingHistory(dashboardData.meetingHistory);
+                applyWorkspaceView('dashboard');
+                return;
+            }
+
+            const filteredUpcoming = dashboardData.upcomingMeetings.filter((meeting) =>
+                [meeting.title, meeting.teamName, meeting.roomCode, meeting.description].join(' ').toLowerCase().includes(query)
+            );
+            const filteredHistory = dashboardData.meetingHistory.filter((meeting) =>
+                [meeting.title, meeting.teamName, meeting.roomCode, meeting.description].join(' ').toLowerCase().includes(query)
+            );
+
+            renderUpcomingMeetings(filteredUpcoming);
+            renderMeetingHistory(filteredHistory);
+            applyWorkspaceView('dashboard');
+        });
+
+        searchInput.addEventListener('input', () => {
+            if (!searchInput.value.trim()) {
+                renderUpcomingMeetings(dashboardData.upcomingMeetings);
+                renderMeetingHistory(dashboardData.meetingHistory);
+            }
+        });
+    }
+
+    document.getElementById('new-meeting-button')?.addEventListener('click', async () => {
+        const title = prompt('Meeting title', 'Instant Meeting') || 'Instant Meeting';
+        const response = await requestJson('/api/meetings', {
+            method: 'POST',
+            body: { title }
+        });
+
+        const autoJoin = localStorage.getItem('vyomDashboardAutoJoin') !== 'false';
+        if (autoJoin) {
+            await joinRoomAndRedirect(response.meeting.roomCode);
+            return;
+        }
+
+        await refreshDashboardData();
+        applyWorkspaceView(currentWorkspaceView);
+    });
+
+    const joinMeetingButton = document.getElementById('join-meeting-button');
+    const meetingCodeInput = document.getElementById('meeting-code');
+    if (joinMeetingButton && meetingCodeInput) {
+        joinMeetingButton.addEventListener('click', async () => {
+            const roomCode = meetingCodeInput.value.trim();
+            if (!roomCode) {
+                alert('Please enter a meeting code or link.');
+                return;
+            }
+
+            await joinRoomAndRedirect(roomCode);
+        });
+    }
+
+    document.getElementById('dashboard-view-calendar-button')?.addEventListener('click', () => {
+        applyWorkspaceView('meetings');
+        document.querySelectorAll('.sidebar-nav .nav-link').forEach((item) => item.classList.remove('active'));
+        document.querySelector('.sidebar-nav .nav-link[data-target="meetings"]')?.classList.add('active');
+    });
+
+    document.getElementById('view-all-meetings-link')?.addEventListener('click', (event) => {
+        event.preventDefault();
+        applyWorkspaceView('history');
+        document.querySelectorAll('.sidebar-nav .nav-link').forEach((item) => item.classList.remove('active'));
+        document.querySelector('.sidebar-nav .nav-link[data-target="history"]')?.classList.add('active');
+    });
+
+    document.querySelectorAll('.sidebar-nav .nav-link').forEach((link) => {
+        link.addEventListener('click', (event) => {
+            event.preventDefault();
+            document.querySelectorAll('.sidebar-nav .nav-link').forEach((item) => item.classList.remove('active'));
+            link.classList.add('active');
+            applyWorkspaceView(link.dataset.target || 'dashboard');
+
+            if (window.innerWidth <= 760) {
+                sidebar?.classList.remove('dashboard-sidebar--open');
+                sidebarBackdrop?.classList.remove('dashboard-sidebar-backdrop--open');
+                sidebarBackdrop?.setAttribute('aria-hidden', 'true');
+            }
+        });
+    });
+
+    function toggleSidebar(open) {
+        if (!sidebar || !sidebarBackdrop) {
+            return;
+        }
+
+        sidebar.classList.toggle('dashboard-sidebar--open', open);
+        sidebarBackdrop.classList.toggle('dashboard-sidebar-backdrop--open', open);
+        sidebarBackdrop.setAttribute('aria-hidden', String(!open));
+        if (menuButton) {
+            menuButton.textContent = open ? '✕' : '☰';
+            menuButton.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+            menuButton.setAttribute('title', open ? 'Close navigation' : 'Open navigation');
+        }
+    }
+
+    menuButton?.addEventListener('click', () => {
+        toggleSidebar(!sidebar?.classList.contains('dashboard-sidebar--open'));
+    });
+
+    sidebarBackdrop?.addEventListener('click', () => toggleSidebar(false));
+    sidebarCloseButton?.addEventListener('click', () => toggleSidebar(false));
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 760) {
+            toggleSidebar(false);
+        }
+    });
+
+    applyWorkspaceView('dashboard');
+}
 async function bootstrap() {
     initializeTheme();
 
