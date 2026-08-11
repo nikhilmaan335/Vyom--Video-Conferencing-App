@@ -273,7 +273,7 @@ async function createUser({ firstName, lastName, email, password, provider = 'lo
     return createPublicUser(user);
 }
 
-async function createSocialUser({ provider, email, displayName }) {
+async function createSocialUser({ provider, email, displayName, avatarUrl = null }) {
     const db = await getDatabase();
     const normalizedEmail = normalizeEmail(email);
 
@@ -299,10 +299,10 @@ async function createSocialUser({ provider, email, displayName }) {
     const passwordHash = await bcrypt.hash(randomToken(8), 10);
     const result = await db.run(
         `
-            INSERT INTO users (first_name, last_name, email, password_hash, provider)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO users (first_name, last_name, email, password_hash, provider, avatar_url)
+            VALUES (?, ?, ?, ?, ?, ?)
         `,
-        [firstName || provider, lastName || provider, normalizedEmail, passwordHash, provider]
+        [firstName || provider, lastName || provider, normalizedEmail, passwordHash, provider, avatarUrl]
     );
 
     const user = await db.get('SELECT * FROM users WHERE id = ?', [result.lastID]);

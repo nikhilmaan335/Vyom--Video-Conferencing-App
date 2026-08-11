@@ -1,5 +1,44 @@
 const AUTH_TOKEN_KEY = 'vyomAuthToken';
 const AUTH_USER_KEY = 'vyomAuthUser';
+const DEFAULT_LOCAL_BACKEND_PORT = '3000';
+
+function getConfiguredBackendOrigin() {
+    const metaOrigin = document.querySelector('meta[name="vyom-api-origin"]')?.content?.trim();
+    const windowOrigin = typeof window.VYOM_API_ORIGIN === 'string' ? window.VYOM_API_ORIGIN.trim() : '';
+    return metaOrigin || windowOrigin;
+}
+
+function getBackendOrigin() {
+    const configuredOrigin = getConfiguredBackendOrigin();
+    if (configuredOrigin) {
+        return configuredOrigin.replace(/\/+$/, '');
+    }
+
+    if (window.location.protocol === 'file:') {
+        return `http://localhost:${DEFAULT_LOCAL_BACKEND_PORT}`;
+    }
+
+    if (window.location.port === DEFAULT_LOCAL_BACKEND_PORT) {
+        return window.location.origin;
+    }
+
+    if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+        return `${window.location.protocol}//${window.location.hostname}:${DEFAULT_LOCAL_BACKEND_PORT}`;
+    }
+
+    return window.location.origin;
+}
+
+const BACKEND_ORIGIN = getBackendOrigin();
+
+function buildBackendUrl(path) {
+    const normalizedPath = String(path || '');
+    if (/^https?:\/\//i.test(normalizedPath)) {
+        return normalizedPath;
+    }
+
+    return new URL(normalizedPath, `${BACKEND_ORIGIN}/`).toString();
+}
 
 function getStoredToken() {
     return localStorage.getItem(AUTH_TOKEN_KEY);
@@ -103,7 +142,7 @@ async function requestJson(path, options = {}) {
         body = JSON.stringify(body);
     }
 
-    const response = await fetch(path, {
+    const response = await fetch(buildBackendUrl(path), {
         method: options.method || 'GET',
         headers,
         body
@@ -199,6 +238,24 @@ async function submitAuthForm(endpoint, payload) {
     redirectToDashboard();
 }
 
+function openCenteredPopup(url, name) {
+    const width = 480;
+    const height = 640;
+    const left = Math.max(0, Math.round((window.screen.width - width) / 2));
+    const top = Math.max(0, Math.round((window.screen.height - height) / 2));
+    const features = [
+        `width=${width}`,
+        `height=${height}`,
+        `left=${left}`,
+        `top=${top}`,
+        'popup=yes',
+        'resizable=yes',
+        'scrollbars=yes'
+    ].join(',');
+
+    return window.open(url, name, features);
+}
+
 function wireAuthPage() {
     const signupForm = document.querySelector('.registration-form');
     const socialAuthModal = document.getElementById('social-auth-modal');
@@ -211,6 +268,8 @@ function wireAuthPage() {
     const socialAuthClose = document.getElementById('social-auth-close');
     const providerFeedback = document.querySelector('.provider-feedback');
     let pendingSocialProvider = '';
+    let pendingSocialPopup = null;
+    let pendingSocialFlowId = '';
 
     function openSocialAuth(provider) {
         pendingSocialProvider = provider;
@@ -239,6 +298,72 @@ function wireAuthPage() {
         socialAuthModal?.classList.add('is-hidden');
         socialAuthModal?.setAttribute('aria-hidden', 'true');
     }
+
+    function openSocialAuthPopup(provider) {
+        const mode = signupForm ? 'signup' : 'signin';
+        const providerSlug = String(provider || '').toLowerCase();
+        pendingSocialProvider = provider;
+        pendingSocialFlowId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+        const popupUrl = buildBackendUrl(
+            `/auth/oauth/${encodeURIComponent(providerSlug)}?flowId=${encodeURIComponent(pendingSocialFlowId)}&mode=${encodeURIComponent(mode)}&returnUrl=${encodeURIComponent(window.location.href)}`
+        );
+        pendingSocialPopup = openCenteredPopup(popupUrl, 'vyom-social-auth');
+
+        if (pendingSocialPopup) {
+            if (providerFeedback) {
+                providerFeedback.textContent = `${provider} popup opened.`;
+            }
+            pendingSocialPopup.focus();
+            return;
+        }
+
+        if (providerFeedback) {
+            providerFeedback.textContent = 'Popup was blocked. Using the on-page social sign-in panel instead.';
+        }
+
+        openSocialAuth(provider);
+    }
+
+    window.addEventListener('message', async (event) => {
+        if (event.origin !== window.location.origin && event.origin !== BACKEND_ORIGIN) {
+            return;
+        }
+
+        const data = event.data || {};
+        if (data.type !== 'vyom-social-auth-success' && data.type !== 'vyom-social-auth-error') {
+            return;
+        }
+
+        if (!pendingSocialFlowId || data.flowId !== pendingSocialFlowId) {
+            return;
+        }
+
+        pendingSocialFlowId = '';
+        pendingSocialProvider = '';
+
+        if (providerFeedback) {
+            providerFeedback.textContent = `Signing in with ${data.user?.provider || data.user?.email || 'social account'}...`;
+        }
+
+        try {
+            pendingSocialPopup?.close();
+        } catch (error) {
+            // Ignore popup close issues.
+        } finally {
+            pendingSocialPopup = null;
+        }
+
+        if (data.type === 'vyom-social-auth-error') {
+            if (providerFeedback) {
+                providerFeedback.textContent = data.message || 'Social sign-in failed.';
+            }
+            return;
+        }
+
+        saveSession(data.token, data.user);
+        redirectToDashboard();
+    });
 
     if (signupForm) {
         signupForm.addEventListener('submit', async (event) => {
@@ -280,7 +405,7 @@ function wireAuthPage() {
     socialButtons.forEach((button) => {
         button.addEventListener('click', async () => {
             const provider = button.dataset.provider || 'Social';
-            openSocialAuth(provider);
+            openSocialAuthPopup(provider);
         });
     });
 
@@ -728,7 +853,7 @@ async function loadMeetingPage(user) {
     }
 
     let localStream = await setupLocalMedia();
-    const socket = window.io({
+    const socket = window.io(BACKEND_ORIGIN, {
         auth: {
             token: getStoredToken()
         }

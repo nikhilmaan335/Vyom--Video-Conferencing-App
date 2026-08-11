@@ -21,3 +21,26 @@ Unlike traditional communication apps, **VYOM** focuses on a lightweight, intuit
 * **Database:** MongoDB (with Mongoose ORM)
 * **Real-Time Communication:** WebRTC (Peer-to-Peer Audio/Video) & Socket.io (Signaling & Chat)
 * **Version Control & Collaboration:** Git & GitHub
+
+---
+
+## 🔐 Social OAuth Setup
+The Google, LinkedIn, and Facebook popup sign-in flow now uses real OAuth redirects on the server.
+
+Set these environment variables before running the app:
+
+* `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+* `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`
+* `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`
+
+Optional redirect overrides if you want to use custom callback URLs:
+
+* `GOOGLE_OAUTH_REDIRECT_URI`
+* `LINKEDIN_OAUTH_REDIRECT_URI`
+* `FACEBOOK_OAUTH_REDIRECT_URI`
+
+Register these callback URLs in the provider consoles if you use the default local setup:
+
+* `http://localhost:3000/auth/oauth/google/callback`
+* `http://localhost:3000/auth/oauth/linkedin/callback`
+* `http://localhost:3000/auth/oauth/facebook/callback`

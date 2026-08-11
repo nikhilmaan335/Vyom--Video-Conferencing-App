@@ -1,0 +1,9 @@
+.dashboard-header-row .dashboard-menu-button {
+    display: none;
+}
+
+@media (max-width: 760px) {
+    .dashboard-header-row .dashboard-menu-button {
+        display: inline-flex;
+    }
+}

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vyom - Social Sign In</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body.social-auth-popup-body {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background:
+                radial-gradient(circle at top left, rgba(91, 108, 255, 0.18), transparent 38%),
+                radial-gradient(circle at bottom right, rgba(46, 163, 255, 0.16), transparent 32%),
+                linear-gradient(180deg, var(--bg), var(--surface-soft));
+        }
+
+        .social-auth-popup-shell {
+            width: min(100%, 440px);
+        }
+
+        .social-auth-popup-card {
+            padding: 28px;
+            border-radius: 28px;
+            background: var(--surface);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+
+        .social-auth-popup-card__header {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 18px;
+        }
+
+        .social-auth-popup-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: fit-content;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .social-auth-popup-card h1 {
+            margin: 0;
+            font-size: 26px;
+            color: var(--text);
+        }
+
+        .social-auth-popup-card p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .social-auth-popup-form {
+            display: grid;
+            gap: 12px;
+        }
+
+        .social-auth-popup-form label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .social-auth-popup-form input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: var(--surface-soft);
+            color: var(--text);
+        }
+
+        .social-auth-popup-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 6px;
+        }
+
+        .social-auth-popup-status {
+            min-height: 20px;
+            font-size: 12px;
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .social-auth-popup-footer {
+            margin-top: 14px;
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .social-auth-popup-footer button {
+            background: transparent;
+            color: var(--accent);
+            text-decoration: underline;
+            cursor: pointer;
+            padding: 0;
+        }
+    </style>
+</head>
+<body class="social-auth-popup-body">
+    <div class="social-auth-popup-shell">
+        <section class="social-auth-popup-card">
+            <div class="social-auth-popup-card__header">
+                <span class="social-auth-popup-badge" id="social-auth-provider-badge">Continue</span>
+                <h1 id="social-auth-title">Continue with social account</h1>
+                <p id="social-auth-description">Complete your sign in from this popup window.</p>
+            </div>
+
+            <form class="social-auth-popup-form" id="social-auth-form">
+                <div>
+                    <label for="social-auth-email">Email</label>
+                    <input type="email" id="social-auth-email" placeholder="Enter your email" required>
+                </div>
+
+                <div>
+                    <label for="social-auth-name">Display name</label>
+                    <input type="text" id="social-auth-name" placeholder="Enter your name" required>
+                </div>
+
+                <div class="social-auth-popup-actions">
+                    <button class="secondary-button" id="social-auth-cancel" type="button">Cancel</button>
+                    <button class="primary-button" type="submit">Continue</button>
+                </div>
+            </form>
+
+            <p class="social-auth-popup-status" id="social-auth-status" aria-live="polite"></p>
+            <p class="social-auth-popup-footer">
+                This popup sends your session back to the main Vyom window after approval.
+                <button id="social-auth-close" type="button">Close popup</button>
+            </p>
+        </section>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const provider = params.get('provider') || 'Social';
+        const mode = params.get('mode') || 'signin';
+        const flowId = params.get('flowId') || '';
+
+        const providerBadge = document.getElementById('social-auth-provider-badge');
+        const title = document.getElementById('social-auth-title');
+        const description = document.getElementById('social-auth-description');
+        const form = document.getElementById('social-auth-form');
+        const emailInput = document.getElementById('social-auth-email');
+        const nameInput = document.getElementById('social-auth-name');
+        const status = document.getElementById('social-auth-status');
+        const cancelButton = document.getElementById('social-auth-cancel');
+        const closeButton = document.getElementById('social-auth-close');
+
+        providerBadge.textContent = provider;
+        title.textContent = `${mode === 'signup' ? 'Sign up' : 'Sign in'} with ${provider}`;
+        description.textContent = `Use your ${provider} account details to continue into Vyom.`;
+        emailInput.focus();
+
+        function closePopup() {
+            if (window.opener) {
+                window.close();
+                return;
+            }
+
+            window.location.href = 'index.html';
+        }
+
+        cancelButton.addEventListener('click', closePopup);
+        closeButton.addEventListener('click', closePopup);
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const email = emailInput.value.trim();
+            const displayName = nameInput.value.trim();
+
+            if (!email || !displayName) {
+                status.textContent = 'Please enter your name and email.';
+                return;
+            }
+
+            status.textContent = `Connecting ${provider} account...`;
+
+            try {
+                const response = await fetch('/api/auth/social', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        provider,
+                        email,
+                        displayName
+                    })
+                });
+
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.message || 'Social sign-in failed.');
+                }
+
+                status.textContent = 'Sign in complete. Returning to Vyom...';
+
+                if (window.opener) {
+                    window.opener.postMessage({
+                        type: 'vyom-social-auth-success',
+                        flowId,
+                        token: data.token,
+                        user: data.user
+                    }, window.location.origin);
+                    window.setTimeout(() => window.close(), 350);
+                    return;
+                }
+
+                status.textContent = 'Session created successfully.';
+            } catch (error) {
+                status.textContent = error.message;
+            }
+        });
+    </script>
+</body>
+</html>
