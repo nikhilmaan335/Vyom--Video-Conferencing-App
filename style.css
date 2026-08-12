@@ -102,6 +102,8 @@ header {
 .brand-name img {
     height: 40px;
     width: auto;
+    transform: scale(1.15);
+    transform-origin: left center;
 }
 
 .header-branding {
@@ -771,7 +773,7 @@ footer {
 
 .sidebar-logo {
     width: auto;
-    height: 40px;
+    height: 48px;
     border-radius: 0;
     background: none;
     object-fit: contain;
@@ -1398,7 +1400,7 @@ footer {
     }
 
     .sidebar-logo {
-        height: 34px;
+        height: 40px;
         width: auto;
     }
 
@@ -1606,11 +1608,12 @@ footer {
 }
 
 .meeting-brand-logo {
-    width: 48px;
-    height: 48px;
-    border-radius: 16px;
-    object-fit: cover;
-    box-shadow: var(--shadow);
+    width: auto;
+    height: 40px;
+    border-radius: 0;
+    object-fit: contain;
+    transform: scale(1.15);
+    transform-origin: left center;
 }
 
 .meeting-branding strong {
@@ -2096,6 +2099,26 @@ footer {
 .chat-composer textarea {
     resize: vertical;
     min-height: 92px;
+}
+
+.chat-composer__actions {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 8px;
+    align-items: center;
+}
+
+.chat-composer__actions .primary-button,
+.chat-composer__actions .secondary-button {
+    width: auto;
+    margin-bottom: 0;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 13px;
+}
+
+.chat-composer__actions .primary-button {
+    justify-self: end;
 }
 
 .meeting-device-panel {

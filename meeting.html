@@ -18,7 +18,7 @@
 
         <div class="meeting-header-actions">
             <button id="meeting-copy-link-button" class="secondary-button meeting-header-button" type="button">Copy Link</button>
-            <button id="meeting-fullscreen-button" class="icon-button meeting-header-button" type="button" aria-label="Toggle fullscreen">Full Screen</button>
+            <button id="meeting-fullscreen-button" class="icon-button meeting-header-button" type="button" aria-label="Toggle fullscreen">⛶</button>
             <span class="meeting-timer" id="meeting-timer">45:12</span>
             <button id="theme-toggle" class="theme-toggle-button" type="button" aria-label="Toggle dark mode">🌙</button>
         </div>
@@ -88,7 +88,11 @@
                 </div>
                 <form class="chat-composer" id="chat-composer">
                     <textarea id="chat-message-input" rows="3" placeholder="Type a message"></textarea>
-                    <button class="primary-button" type="submit">Send</button>
+                    <div class="chat-composer__actions">
+                        <button class="secondary-button" id="chat-attach-image-button" type="button">Image</button>
+                        <button class="secondary-button" id="chat-attach-file-button" type="button">File</button>
+                        <button class="primary-button" type="submit">Send</button>
+                    </div>
                 </form>
             </div>
         </aside>
@@ -157,14 +161,6 @@
                         <button class="tool-card" id="open-whiteboard-button" type="button">
                             <strong>Whiteboard</strong>
                             <span>Draw together live</span>
-                        </button>
-                        <button class="tool-card" id="share-image-button" type="button">
-                            <strong>Image</strong>
-                            <span>Share screenshots or photos</span>
-                        </button>
-                        <button class="tool-card" id="share-file-button" type="button">
-                            <strong>File</strong>
-                            <span>Send docs and assets</span>
                         </button>
                         <button class="tool-card" id="ai-suggestions-button" type="button">
                             <strong>AI suggestions</strong>
@@ -239,6 +235,10 @@
             <button class="control-button" id="more-button" type="button">
                 <span>⋯</span>
                 <strong>More</strong>
+            </button>
+            <button class="control-button control-button--danger is-hidden" id="meeting-exit-fullscreen-button" type="button">
+                <span>❐</span>
+                <strong>Exit FS</strong>
             </button>
             <button class="control-button control-button--danger" id="leave-meeting-button" type="button">
                 <span>⏻</span>

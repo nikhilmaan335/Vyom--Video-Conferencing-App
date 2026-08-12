@@ -201,8 +201,48 @@ function redirectToDashboard() {
     window.location.href = 'dashboard.html';
 }
 
+function normalizeRoomCodeInput(rawValue) {
+    let value = String(rawValue || '').trim();
+    if (!value) {
+        return '';
+    }
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+            value = decodeURIComponent(value);
+        } catch (error) {
+            break;
+        }
+    }
+
+    const candidates = [value];
+    if (!/^https?:\/\//i.test(value) && value.includes('meeting.html?')) {
+        candidates.push(`http://${value}`);
+    }
+
+    for (const candidate of candidates) {
+        try {
+            const parsed = new URL(candidate, window.location.origin);
+            const fromQuery = parsed.searchParams.get('room');
+            if (fromQuery) {
+                return normalizeRoomCodeInput(fromQuery);
+            }
+        } catch (error) {
+            // Ignore parsing issues and continue with fallback extraction.
+        }
+    }
+
+    const roomMatch = value.match(/[?&]room=([^&#]+)/i);
+    if (roomMatch?.[1]) {
+        return normalizeRoomCodeInput(roomMatch[1]);
+    }
+
+    return value.replace(/^\/+|\/+$/g, '');
+}
+
 function redirectToMeeting(roomCode) {
-    window.location.href = `meeting.html?room=${encodeURIComponent(roomCode)}`;
+    const normalizedRoomCode = normalizeRoomCodeInput(roomCode);
+    window.location.href = `meeting.html?room=${encodeURIComponent(normalizedRoomCode)}`;
 }
 
 async function handleSignOut() {
@@ -699,11 +739,17 @@ async function setupLocalMedia() {
 
 async function loadMeetingPage(user) {
     const params = new URLSearchParams(window.location.search);
-    const roomCode = params.get('room');
+    const rawRoomCode = params.get('room');
+    const roomCode = normalizeRoomCodeInput(rawRoomCode);
 
     if (!roomCode) {
         redirectToDashboard();
         return;
+    }
+
+    if (rawRoomCode && roomCode !== rawRoomCode) {
+        const nextUrl = `${window.location.pathname}?room=${encodeURIComponent(roomCode)}`;
+        window.history.replaceState({}, '', nextUrl);
     }
 
     const roomData = await requestJson(`/api/meetings/${encodeURIComponent(roomCode)}`);
@@ -751,6 +797,7 @@ async function loadMeetingPage(user) {
     const participantsRoomCode = document.getElementById('participants-room-code');
     const meetingCopyLinkButton = document.getElementById('meeting-copy-link-button');
     const meetingFullscreenButton = document.getElementById('meeting-fullscreen-button');
+    const meetingExitFullscreenButton = document.getElementById('meeting-exit-fullscreen-button');
     const speakerMicIndicator = document.getElementById('speaker-mic-indicator');
     const speakerCameraIndicator = document.getElementById('speaker-camera-indicator');
     const meetingRoomShell = document.querySelector('.meeting-room-shell');
@@ -761,10 +808,10 @@ async function loadMeetingPage(user) {
     const shareTabOptionButton = document.getElementById('share-tab-option');
     const stopShareOptionButton = document.getElementById('stop-share-option');
     const openWhiteboardButton = document.getElementById('open-whiteboard-button');
-    const shareImageButton = document.getElementById('share-image-button');
-    const shareFileButton = document.getElementById('share-file-button');
     const aiSuggestionsButton = document.getElementById('ai-suggestions-button');
     const aiSuggestionsList = document.getElementById('ai-suggestions-list');
+    const chatAttachImageButton = document.getElementById('chat-attach-image-button');
+    const chatAttachFileButton = document.getElementById('chat-attach-file-button');
     const imageShareInput = document.getElementById('image-share-input');
     const fileShareInput = document.getElementById('file-share-input');
     const whiteboardPanel = document.getElementById('whiteboard-panel');
@@ -1391,9 +1438,13 @@ async function loadMeetingPage(user) {
         }
 
         const isFullscreen = Boolean(document.fullscreenElement);
-        meetingFullscreenButton.textContent = isFullscreen ? 'Exit Full Screen' : 'Full Screen';
+        meetingFullscreenButton.textContent = isFullscreen ? '❐' : '⛶';
         meetingFullscreenButton.setAttribute('aria-label', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
         meetingFullscreenButton.setAttribute('title', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
+
+        if (meetingExitFullscreenButton) {
+            meetingExitFullscreenButton.classList.toggle('is-hidden', !isFullscreen);
+        }
     }
 
     async function toggleFullscreen() {
@@ -1411,7 +1462,7 @@ async function loadMeetingPage(user) {
     }
 
     async function copyMeetingLink() {
-        const meetingLink = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(activeRoomCode)}`;
+        const meetingLink = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(normalizeRoomCodeInput(activeRoomCode))}`;
         if (navigator.clipboard?.writeText) {
             await navigator.clipboard.writeText(meetingLink);
         } else {
@@ -1898,6 +1949,25 @@ async function loadMeetingPage(user) {
         updateDrawerBadges();
     }
 
+    function applyRaiseHandToggle(nextRaised, shouldEmit = true) {
+        const handRaised = Boolean(nextRaised);
+        if (raiseHandButton) {
+            raiseHandButton.classList.toggle('is-active', handRaised);
+            raiseHandButton.setAttribute('aria-label', handRaised ? 'Lower hand' : 'Raise hand');
+            raiseHandButton.setAttribute('title', handRaised ? 'Lower hand' : 'Raise hand');
+        }
+
+        if (shouldEmit) {
+            pushStatePatch({ handRaised });
+        }
+    }
+
+    function syncLocalRaiseHandFromRoster() {
+        const localParticipant = currentRoomParticipants.find((participant) => participant.socketId === currentLocalSocketId)
+            || currentRoomParticipants.find((participant) => participant.email === user.email);
+        applyRaiseHandToggle(Boolean(localParticipant?.handRaised), false);
+    }
+
     function applyAudioToggle(nextEnabled, shouldEmit = true) {
         audioEnabled = Boolean(nextEnabled);
         if (localStream) {
@@ -1994,6 +2064,7 @@ async function loadMeetingPage(user) {
         currentRoomParticipants = participants;
         syncPeerConnections(currentRoomParticipants);
         roomState.activeSpeaker = getMostActiveSpeaker(currentRoomParticipants);
+        syncLocalRaiseHandFromRoster();
         renderMeetingState();
     });
 
@@ -2003,6 +2074,7 @@ async function loadMeetingPage(user) {
         if (participants.length) {
             currentRoomParticipants = participants;
         }
+        syncLocalRaiseHandFromRoster();
         renderMeetingState();
     });
 
@@ -2108,6 +2180,13 @@ async function loadMeetingPage(user) {
         updateFullscreenButton();
         document.addEventListener('fullscreenchange', updateFullscreenButton);
     }
+    if (meetingExitFullscreenButton) {
+        meetingExitFullscreenButton.addEventListener('click', () => {
+            if (document.fullscreenElement) {
+                toggleFullscreen().catch((error) => alert(error.message || 'Unable to exit fullscreen.'));
+            }
+        });
+    }
     if (participantsButton) {
         participantsButton.addEventListener('click', () => setDrawerState('participants', roomState.selectedDrawer !== 'participants'));
     }
@@ -2150,21 +2229,19 @@ async function loadMeetingPage(user) {
             openWhiteboard();
         });
     }
-    if (shareImageButton) {
-        shareImageButton.addEventListener('click', () => {
-            closeMorePanel();
-            imageShareInput?.click();
-        });
-    }
-    if (shareFileButton) {
-        shareFileButton.addEventListener('click', () => {
-            closeMorePanel();
-            fileShareInput?.click();
-        });
-    }
     if (aiSuggestionsButton) {
         aiSuggestionsButton.addEventListener('click', () => {
             generateAiSuggestions();
+        });
+    }
+    if (chatAttachImageButton) {
+        chatAttachImageButton.addEventListener('click', () => {
+            imageShareInput?.click();
+        });
+    }
+    if (chatAttachFileButton) {
+        chatAttachFileButton.addEventListener('click', () => {
+            fileShareInput?.click();
         });
     }
     if (imageShareInput) {
@@ -2303,8 +2380,7 @@ async function loadMeetingPage(user) {
 
     if (raiseHandButton) {
         raiseHandButton.addEventListener('click', () => {
-            const handRaised = raiseHandButton.classList.toggle('is-active');
-            pushStatePatch({ handRaised });
+            applyRaiseHandToggle(!raiseHandButton.classList.contains('is-active'));
         });
     }
 
@@ -2368,6 +2444,7 @@ async function loadMeetingPage(user) {
     generateAiSuggestions();
     applyAudioToggle(audioEnabled, false);
     applyVideoToggle(videoEnabled, false);
+    applyRaiseHandToggle(false, false);
     renderMeetingState();
 }
 
@@ -2502,8 +2579,9 @@ async function loadDashboardPage(user) {
     }
 
     async function joinRoomAndRedirect(roomCode) {
-        await requestJson(`/api/meetings/${encodeURIComponent(roomCode)}/join`, { method: 'POST' });
-        redirectToMeeting(roomCode);
+        const normalizedRoomCode = normalizeRoomCodeInput(roomCode);
+        await requestJson(`/api/meetings/${encodeURIComponent(normalizedRoomCode)}/join`, { method: 'POST' });
+        redirectToMeeting(normalizedRoomCode);
     }
 
     function renderMeetingsWorkspace() {
@@ -2904,7 +2982,7 @@ async function loadDashboardPage(user) {
     const meetingCodeInput = document.getElementById('meeting-code');
     if (joinMeetingButton && meetingCodeInput) {
         joinMeetingButton.addEventListener('click', async () => {
-            const roomCode = meetingCodeInput.value.trim();
+            const roomCode = normalizeRoomCodeInput(meetingCodeInput.value.trim());
             if (!roomCode) {
                 alert('Please enter a meeting code or link.');
                 return;
