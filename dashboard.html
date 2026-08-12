@@ -14,7 +14,6 @@
             <div class="sidebar-branding">
                 <img src="logo.png" alt="Vyom Logo" class="sidebar-logo">
                 <div class="sidebar-brand-text">
-                    <strong>Vyom</strong>
                     <span>Real-time meetings and teams</span>
                 </div>
             </div>
@@ -28,13 +27,14 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="profile-preview">
-                    <img src="logo.png" alt="User Avatar" class="profile-avatar">
-                    <div>
+                <button id="dashboard-profile-button" class="profile-preview profile-preview-button" type="button" aria-controls="profile-modal" aria-expanded="false">
+                    <img src="logo.png" alt="User Avatar" class="profile-avatar" id="dashboard-user-avatar">
+                    <div class="profile-preview-copy">
                         <p class="profile-name" id="dashboard-user-name">Loading...</p>
                         <p class="profile-email" id="dashboard-user-email">Loading...</p>
                     </div>
-                </div>
+                    <span class="profile-preview-chevron" aria-hidden="true">›</span>
+                </button>
                 <button id="dashboard-sign-out-button" class="secondary-button sidebar-signout-button" type="button">Sign Out</button>
                 <a href="#" class="support-link">Help & Support</a>
             </div>
@@ -130,6 +130,70 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <div class="social-auth-modal is-hidden profile-modal" id="profile-modal" aria-hidden="true">
+        <div class="social-auth-modal__card profile-modal__card" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+            <button class="social-auth-modal__close" id="profile-modal-close" type="button" aria-label="Close profile settings">✕</button>
+            <div class="profile-modal__header">
+                <div class="profile-modal__avatar-column">
+                    <img src="logo.png" alt="Profile preview" class="profile-modal__avatar" id="profile-modal-avatar">
+                    <label class="profile-avatar-upload">
+                        <input type="file" id="profile-avatar-input" accept="image/*">
+                        <span>Change photo</span>
+                    </label>
+                </div>
+                <div class="social-auth-modal__header">
+                    <p class="social-auth-modal__eyebrow">Profile</p>
+                    <h2 id="profile-modal-title">Edit your account</h2>
+                    <p>Update your name, email, photo, and password from one place.</p>
+                </div>
+            </div>
+
+            <form class="profile-form" id="profile-form">
+                <div class="profile-form-grid">
+                    <label>
+                        First name
+                        <input type="text" id="profile-first-name" autocomplete="given-name" required>
+                    </label>
+                    <label>
+                        Last name
+                        <input type="text" id="profile-last-name" autocomplete="family-name" required>
+                    </label>
+                    <label class="profile-form-grid__full">
+                        Email
+                        <input type="email" id="profile-email" autocomplete="email" required>
+                    </label>
+                </div>
+
+                <div class="profile-form-section">
+                    <div class="panel-header">
+                        <h2>Password change</h2>
+                    </div>
+                    <div class="profile-password-grid">
+                        <label>
+                            Current password
+                            <input type="password" id="profile-current-password" autocomplete="current-password" placeholder="Enter current password">
+                        </label>
+                        <label>
+                            New password
+                            <input type="password" id="profile-new-password" autocomplete="new-password" placeholder="Enter new password">
+                        </label>
+                        <label>
+                            Confirm new password
+                            <input type="password" id="profile-confirm-password" autocomplete="new-password" placeholder="Confirm new password">
+                        </label>
+                    </div>
+                    <p class="profile-form-note">Password changes require your current password.</p>
+                </div>
+
+                <p class="profile-form-status" id="profile-form-status" aria-live="polite"></p>
+                <div class="profile-form-actions">
+                    <button class="secondary-button" id="profile-cancel-button" type="button">Cancel</button>
+                    <button class="primary-button" type="submit">Save changes</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <div class="dashboard-backdrop" id="dashboard-sidebar-backdrop" aria-hidden="true"></div>

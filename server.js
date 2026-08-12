@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const {
     createUser,
     createSocialUser,
+    updateUserProfile,
     authenticateUser,
     createSession,
     getUserBySessionToken,
@@ -752,6 +753,25 @@ app.post('/api/auth/logout', requireAuth, async (req, res, next) => {
 
 app.get('/api/me', requireAuth, async (req, res) => {
     return res.json({ user: req.user });
+});
+
+app.patch('/api/me', requireAuth, async (req, res, next) => {
+    try {
+        const { firstName, lastName, email, avatarUrl, currentPassword, newPassword } = req.body;
+        const user = await updateUserProfile({
+            userId: req.user.id,
+            firstName,
+            lastName,
+            email,
+            avatarUrl,
+            currentPassword,
+            newPassword
+        });
+
+        return res.json({ user });
+    } catch (error) {
+        return next(error);
+    }
 });
 
 app.get('/api/dashboard', requireAuth, async (req, res, next) => {

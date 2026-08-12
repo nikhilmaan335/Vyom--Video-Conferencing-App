@@ -2309,6 +2309,21 @@ async function loadDashboardPage(user) {
 
     const userName = document.getElementById('dashboard-user-name');
     const userEmail = document.getElementById('dashboard-user-email');
+    const userAvatar = document.getElementById('dashboard-user-avatar');
+    const profileButton = document.getElementById('dashboard-profile-button');
+    const profileModal = document.getElementById('profile-modal');
+    const profileModalCloseButton = document.getElementById('profile-modal-close');
+    const profileCancelButton = document.getElementById('profile-cancel-button');
+    const profileForm = document.getElementById('profile-form');
+    const profileFormStatus = document.getElementById('profile-form-status');
+    const profileAvatarInput = document.getElementById('profile-avatar-input');
+    const profileAvatarPreview = document.getElementById('profile-modal-avatar');
+    const profileFirstNameInput = document.getElementById('profile-first-name');
+    const profileLastNameInput = document.getElementById('profile-last-name');
+    const profileEmailInput = document.getElementById('profile-email');
+    const profileCurrentPasswordInput = document.getElementById('profile-current-password');
+    const profileNewPasswordInput = document.getElementById('profile-new-password');
+    const profileConfirmPasswordInput = document.getElementById('profile-confirm-password');
     const sidebar = document.querySelector('.dashboard-sidebar');
     const sidebarBackdrop = document.getElementById('dashboard-sidebar-backdrop');
     const menuButton = document.getElementById('dashboard-menu-button');
@@ -2318,6 +2333,7 @@ async function loadDashboardPage(user) {
     const dashboardOverview = document.getElementById('dashboard-overview');
     const upcomingSection = document.querySelector('.upcoming-section');
     const historyPanel = document.querySelector('.history-panel');
+    let profileAvatarDataUrl = dashboardData.profile.avatarUrl || '';
 
     function ensureWorkspacePanel() {
         let panel = document.getElementById('dashboard-workspace-panel');
@@ -2338,6 +2354,67 @@ async function loadDashboardPage(user) {
         if (banner) {
             banner.textContent = message;
         }
+    }
+
+    function updateProfileImage(source) {
+        const resolvedSource = source || 'logo.png';
+        if (userAvatar) {
+            userAvatar.src = resolvedSource;
+        }
+        if (profileAvatarPreview) {
+            profileAvatarPreview.src = resolvedSource;
+        }
+    }
+
+    function syncProfileFields(profile) {
+        if (profileFirstNameInput) {
+            profileFirstNameInput.value = profile.firstName || '';
+        }
+        if (profileLastNameInput) {
+            profileLastNameInput.value = profile.lastName || '';
+        }
+        if (profileEmailInput) {
+            profileEmailInput.value = profile.email || '';
+        }
+        if (profileCurrentPasswordInput) {
+            profileCurrentPasswordInput.value = '';
+        }
+        if (profileNewPasswordInput) {
+            profileNewPasswordInput.value = '';
+        }
+        if (profileConfirmPasswordInput) {
+            profileConfirmPasswordInput.value = '';
+        }
+
+        profileAvatarDataUrl = profile.avatarUrl || '';
+        updateProfileImage(profileAvatarDataUrl || 'logo.png');
+
+        if (profileFormStatus) {
+            profileFormStatus.textContent = '';
+            profileFormStatus.className = 'profile-form-status';
+        }
+    }
+
+    function openProfileModal() {
+        syncProfileFields(dashboardData.profile);
+        profileModal?.classList.remove('is-hidden');
+        profileModal?.setAttribute('aria-hidden', 'false');
+        profileButton?.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeProfileModal() {
+        profileModal?.classList.add('is-hidden');
+        profileModal?.setAttribute('aria-hidden', 'true');
+        profileButton?.setAttribute('aria-expanded', 'false');
+    }
+
+    function setProfileStatus(message, isError = false) {
+        if (!profileFormStatus) {
+            return;
+        }
+
+        profileFormStatus.textContent = message;
+        profileFormStatus.className = `profile-form-status${isError ? ' is-error' : ''}`;
     }
 
     async function refreshDashboardData() {
@@ -2603,6 +2680,7 @@ async function loadDashboardPage(user) {
     if (userEmail) {
         userEmail.textContent = dashboardData.profile.email;
     }
+    updateProfileImage(dashboardData.profile.avatarUrl || 'logo.png');
 
     renderOverview(dashboardData);
     renderTeamList(dashboardData.teams);
@@ -2612,6 +2690,86 @@ async function loadDashboardPage(user) {
     if (localStorage.getItem('vyomDashboardCompactView') === 'true') {
         document.body.classList.add('dashboard-compact');
     }
+
+    profileButton?.addEventListener('click', openProfileModal);
+    profileModalCloseButton?.addEventListener('click', closeProfileModal);
+    profileCancelButton?.addEventListener('click', closeProfileModal);
+    profileModal?.addEventListener('click', (event) => {
+        if (event.target === profileModal) {
+            closeProfileModal();
+        }
+    });
+
+    profileAvatarInput?.addEventListener('change', () => {
+        const file = profileAvatarInput.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            profileAvatarDataUrl = String(reader.result || '');
+            updateProfileImage(profileAvatarDataUrl);
+            setProfileStatus('Profile photo selected. Save changes to apply it.');
+        };
+        reader.readAsDataURL(file);
+    });
+
+    profileForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const firstName = profileFirstNameInput?.value.trim();
+        const lastName = profileLastNameInput?.value.trim();
+        const email = profileEmailInput?.value.trim();
+        const currentPassword = profileCurrentPasswordInput?.value || '';
+        const newPassword = profileNewPasswordInput?.value || '';
+        const confirmPassword = profileConfirmPasswordInput?.value || '';
+
+        if (newPassword || confirmPassword) {
+            if (newPassword !== confirmPassword) {
+                setProfileStatus('New passwords do not match.', true);
+                return;
+            }
+
+            if (!currentPassword) {
+                setProfileStatus('Current password is required to change your password.', true);
+                return;
+            }
+        }
+
+        try {
+            const response = await requestJson('/api/me', {
+                method: 'PATCH',
+                body: {
+                    firstName,
+                    lastName,
+                    email,
+                    avatarUrl: profileAvatarDataUrl || null,
+                    currentPassword,
+                    newPassword
+                }
+            });
+
+            dashboardData.profile = response.user;
+            updateProfileImage(response.user.avatarUrl || 'logo.png');
+            if (userName) {
+                userName.textContent = response.user.name;
+            }
+            if (userEmail) {
+                userEmail.textContent = response.user.email;
+            }
+
+            const token = getStoredToken();
+            if (token) {
+                saveSession(token, response.user);
+            }
+
+            setProfileStatus('Profile updated successfully.');
+            closeProfileModal();
+        } catch (error) {
+            setProfileStatus(error.message, true);
+        }
+    });
 
     document.getElementById('dashboard-sign-out-button')?.addEventListener('click', handleSignOut);
 
@@ -2730,6 +2888,12 @@ async function loadDashboardPage(user) {
     window.addEventListener('resize', () => {
         if (window.innerWidth > 760) {
             toggleSidebar(false);
+        }
+    });
+
+    window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && profileModal && !profileModal.classList.contains('is-hidden')) {
+            closeProfileModal();
         }
     });
 

@@ -310,6 +310,97 @@ async function createSocialUser({ provider, email, displayName, avatarUrl = null
     return createPublicUser(user);
 }
 
+async function updateUserProfile({ userId, firstName, lastName, email, avatarUrl, currentPassword, newPassword }) {
+    const db = await getDatabase();
+    const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
+
+    if (!user) {
+        const error = new Error('User not found.');
+        error.status = 404;
+        throw error;
+    }
+
+    const updates = [];
+    const params = [];
+
+    if (typeof firstName === 'string') {
+        const trimmedFirstName = firstName.trim();
+        if (!trimmedFirstName) {
+            const error = new Error('First name is required.');
+            error.status = 400;
+            throw error;
+        }
+
+        updates.push('first_name = ?');
+        params.push(trimmedFirstName);
+    }
+
+    if (typeof lastName === 'string') {
+        const trimmedLastName = lastName.trim();
+        if (!trimmedLastName) {
+            const error = new Error('Last name is required.');
+            error.status = 400;
+            throw error;
+        }
+
+        updates.push('last_name = ?');
+        params.push(trimmedLastName);
+    }
+
+    if (typeof email === 'string') {
+        const normalizedEmail = normalizeEmail(email);
+        if (!normalizedEmail) {
+            const error = new Error('Email is required.');
+            error.status = 400;
+            throw error;
+        }
+
+        const existing = await db.get('SELECT id FROM users WHERE email = ? AND id != ?', [normalizedEmail, userId]);
+        if (existing) {
+            const error = new Error('An account with that email already exists.');
+            error.status = 409;
+            throw error;
+        }
+
+        updates.push('email = ?');
+        params.push(normalizedEmail);
+    }
+
+    if (avatarUrl !== undefined) {
+        updates.push('avatar_url = ?');
+        params.push(avatarUrl || null);
+    }
+
+    if (newPassword) {
+        if (!currentPassword) {
+            const error = new Error('Current password is required to change your password.');
+            error.status = 400;
+            throw error;
+        }
+
+        const passwordMatches = await bcrypt.compare(currentPassword || '', user.password_hash);
+        if (!passwordMatches) {
+            const error = new Error('Current password is incorrect.');
+            error.status = 401;
+            throw error;
+        }
+
+        updates.push('password_hash = ?');
+        params.push(await bcrypt.hash(newPassword, 10));
+    }
+
+    if (!updates.length) {
+        return createPublicUser(user);
+    }
+
+    params.push(userId);
+    await db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    const updatedUser = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
+    await ensureStarterWorkspace(db, updatedUser);
+    return createPublicUser(updatedUser);
+}
+
 async function authenticateUser({ email, password }) {
     const db = await getDatabase();
     const normalizedEmail = normalizeEmail(email);
@@ -765,6 +856,7 @@ module.exports = {
     createPublicUser,
     createUser,
     createSocialUser,
+    updateUserProfile,
     authenticateUser,
     createSession,
     getUserBySessionToken,
