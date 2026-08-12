@@ -757,8 +757,7 @@ footer {
     min-height: auto;
     width: 100%;
     align-self: start;
-    margin-top: 4
-    0px;
+    margin-top: 40px;
     position: sticky;
     top: 24px;
 }
@@ -766,45 +765,34 @@ footer {
 .sidebar-branding {
     display: flex;
     align-items: center;
-    gap: 14px;
+    justify-content: center;
+    padding: 4px 0 8px;
 }
 
 .sidebar-logo {
-    width: 46px;
-    height: 46px;
-    border-radius: 16px;
-    background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
-    object-fit: cover;
-}
-
-.sidebar-brand-text strong {
-    display: block;
-    font-size: 18px;
-    color: var(--text);
-}
-
-.sidebar-brand-text span {
-    display: block;
-    font-size: 13px;
-    color: var(--muted);
-    margin-top: 4px;
+    width: auto;
+    height: 40px;
+    border-radius: 0;
+    background: none;
+    object-fit: contain;
 }
 
 .profile-preview-button {
     width: 100%;
     background: var(--surface-soft);
-    border: 1px solid transparent;
+    border: 1px solid var(--border);
     text-align: left;
     cursor: pointer;
     padding: 14px;
     border-radius: 22px;
-    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .profile-preview-button:hover,
 .profile-preview-button:focus-visible {
     transform: translateY(-1px);
-    border-color: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+    box-shadow: 0 14px 26px rgba(2, 6, 23, 0.16);
     outline: none;
 }
 
@@ -855,6 +843,7 @@ footer {
     align-items: center;
     gap: 12px;
     margin-bottom: 14px;
+    min-width: 0;
 }
 
 .profile-avatar {
@@ -870,12 +859,19 @@ footer {
     font-size: 14px;
     font-weight: 700;
     color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .profile-email {
     margin: 2px 0 0;
     font-size: 12px;
     color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 
 .profile-modal {
@@ -884,6 +880,9 @@ footer {
 
 .profile-modal__card {
     width: min(100%, 680px);
+    max-height: min(88vh, 760px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .profile-modal__header {
@@ -956,7 +955,8 @@ footer {
 }
 
 .profile-form-grid input,
-.profile-password-grid input {
+.profile-password-grid input,
+.profile-form-grid select {
     width: 100%;
     padding: 14px 16px;
     border-radius: 16px;
@@ -964,6 +964,12 @@ footer {
     background: var(--surface-soft);
     color: var(--text);
     font-size: 14px;
+}
+
+.profile-form-grid input[readonly] {
+    opacity: 0.85;
+    cursor: not-allowed;
+    background: color-mix(in srgb, var(--surface-soft) 78%, #94a3b8 22%);
 }
 
 .profile-form-section {
@@ -1002,6 +1008,10 @@ footer {
     display: flex;
     gap: 12px;
     justify-content: flex-end;
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0), var(--surface) 30%);
+    padding-top: 10px;
 }
 
 .profile-form-actions .primary-button,
@@ -1378,6 +1388,12 @@ footer {
 
     .sidebar-branding {
         padding-right: 44px;
+        justify-content: flex-start;
+    }
+
+    .sidebar-logo {
+        height: 34px;
+        width: auto;
     }
 
     .profile-modal__card {
@@ -1493,7 +1509,7 @@ footer {
 
 .dashboard-overview {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
     gap: 18px;
 }
 
@@ -2273,10 +2289,6 @@ footer {
 }
 
 @media (max-width: 1200px) {
-    .dashboard-overview {
-        grid-template-columns: 1fr;
-    }
-
     .meeting-room-shell {
         grid-template-columns: 1fr;
         gap: 20px;
@@ -2315,6 +2327,41 @@ footer {
 
     .participant-card {
         min-height: 148px;
+    }
+}
+
+@media (max-width: 920px) {
+    .dashboard-overview {
+        gap: 12px;
+    }
+
+    .overview-card {
+        padding: 14px 12px;
+    }
+
+    .overview-card strong {
+        font-size: 22px;
+    }
+}
+
+@media (max-width: 640px) {
+    .dashboard-overview {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(130px, 1fr);
+        grid-template-columns: none;
+        overflow-x: auto;
+        padding-bottom: 2px;
+    }
+
+    .overview-card {
+        min-width: 130px;
+    }
+}
+
+@media (max-width: 420px) {
+    .dashboard-overview {
+        display: none;
     }
 }
 

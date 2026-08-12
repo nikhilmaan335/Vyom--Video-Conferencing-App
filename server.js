@@ -340,8 +340,32 @@ function getPostMessageTargetOrigin(returnUrl) {
     return '*';
 }
 
+function resolveOAuthAvatarUrl(profile) {
+    const possibleValues = [
+        profile?.picture?.data?.url,
+        profile?.picture?.url,
+        profile?.picture,
+        profile?.avatar_url,
+        profile?.avatar,
+        profile?.profile_picture,
+        profile?.profilePicture,
+        profile?.image,
+        profile?.photos?.[0]?.value
+    ];
+
+    for (const value of possibleValues) {
+        if (typeof value === 'string' && /^https?:\/\//i.test(value)) {
+            // Prefer larger Google avatars when a size token is present.
+            return value.replace(/=s\d+-c$/, '=s384-c');
+        }
+    }
+
+    return null;
+}
+
 function buildOAuthUser(providerName, profile) {
     const provider = String(providerName || '').toLowerCase();
+    const avatarUrl = resolveOAuthAvatarUrl(profile);
 
     if (provider === 'facebook') {
         const displayName = profile.name || 'Facebook user';
@@ -349,7 +373,7 @@ function buildOAuthUser(providerName, profile) {
         return {
             email,
             displayName,
-            avatarUrl: profile.picture?.data?.url || null
+            avatarUrl
         };
     }
 
@@ -359,7 +383,7 @@ function buildOAuthUser(providerName, profile) {
         return {
             email,
             displayName,
-            avatarUrl: profile.picture || null
+            avatarUrl
         };
     }
 
@@ -368,7 +392,7 @@ function buildOAuthUser(providerName, profile) {
     return {
         email,
         displayName,
-        avatarUrl: profile.picture || null
+        avatarUrl
     };
 }
 
@@ -729,6 +753,13 @@ app.post('/api/auth/login', async (req, res, next) => {
 app.post('/api/auth/social', async (req, res, next) => {
     try {
         const { provider, email, displayName } = req.body;
+        const normalizedProvider = String(provider || '').trim().toLowerCase();
+        if (['google', 'linkedin', 'facebook'].includes(normalizedProvider)) {
+            return res.status(400).json({
+                message: `Use OAuth ${provider} sign-in to continue with your provider profile photo.`
+            });
+        }
+
         const socialEmail = email || `${String(provider || 'social').toLowerCase()}@demo.vyom`;
         const user = await createSocialUser({
             provider,
@@ -757,13 +788,14 @@ app.get('/api/me', requireAuth, async (req, res) => {
 
 app.patch('/api/me', requireAuth, async (req, res, next) => {
     try {
-        const { firstName, lastName, email, avatarUrl, currentPassword, newPassword } = req.body;
+        const { firstName, lastName, avatarUrl, age, occupation, currentPassword, newPassword } = req.body;
         const user = await updateUserProfile({
             userId: req.user.id,
             firstName,
             lastName,
-            email,
             avatarUrl,
+            age,
+            occupation,
             currentPassword,
             newPassword
         });

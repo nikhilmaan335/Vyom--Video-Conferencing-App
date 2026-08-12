@@ -24,8 +24,23 @@ function createPublicUser(user) {
         email: user.email,
         provider: user.provider,
         avatarUrl: user.avatar_url,
+        age: user.age,
+        occupation: user.occupation,
         createdAt: user.created_at
     };
+}
+
+async function ensureUsersProfileColumns(db) {
+    const columns = await db.all('PRAGMA table_info(users)');
+    const columnNames = new Set(columns.map((column) => column.name));
+
+    if (!columnNames.has('age')) {
+        await db.exec('ALTER TABLE users ADD COLUMN age INTEGER;');
+    }
+
+    if (!columnNames.has('occupation')) {
+        await db.exec("ALTER TABLE users ADD COLUMN occupation TEXT;");
+    }
 }
 
 function randomToken(length = 32) {
@@ -133,6 +148,7 @@ async function getDatabase() {
                     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 );
             `);
+            await ensureUsersProfileColumns(db);
             return db;
         });
     }
@@ -291,6 +307,12 @@ async function createSocialUser({ provider, email, displayName, avatarUrl = null
 
     const existing = await db.get('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
     if (existing) {
+        if (avatarUrl && existing.avatar_url !== avatarUrl) {
+            await db.run('UPDATE users SET avatar_url = ? WHERE id = ?', [avatarUrl, existing.id]);
+            const refreshedUser = await db.get('SELECT * FROM users WHERE id = ?', [existing.id]);
+            return createPublicUser(refreshedUser);
+        }
+
         return createPublicUser(existing);
     }
 
@@ -310,7 +332,7 @@ async function createSocialUser({ provider, email, displayName, avatarUrl = null
     return createPublicUser(user);
 }
 
-async function updateUserProfile({ userId, firstName, lastName, email, avatarUrl, currentPassword, newPassword }) {
+async function updateUserProfile({ userId, firstName, lastName, avatarUrl, age, occupation, currentPassword, newPassword }) {
     const db = await getDatabase();
     const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
 
@@ -347,28 +369,34 @@ async function updateUserProfile({ userId, firstName, lastName, email, avatarUrl
         params.push(trimmedLastName);
     }
 
-    if (typeof email === 'string') {
-        const normalizedEmail = normalizeEmail(email);
-        if (!normalizedEmail) {
-            const error = new Error('Email is required.');
+    if (avatarUrl !== undefined) {
+        updates.push('avatar_url = ?');
+        params.push(avatarUrl || null);
+    }
+
+    if (age !== undefined && age !== null && age !== '') {
+        const normalizedAge = Number(age);
+        if (!Number.isInteger(normalizedAge) || normalizedAge < 10 || normalizedAge > 120) {
+            const error = new Error('Age must be between 10 and 120.');
             error.status = 400;
             throw error;
         }
 
-        const existing = await db.get('SELECT id FROM users WHERE email = ? AND id != ?', [normalizedEmail, userId]);
-        if (existing) {
-            const error = new Error('An account with that email already exists.');
-            error.status = 409;
+        updates.push('age = ?');
+        params.push(normalizedAge);
+    }
+
+    if (occupation !== undefined) {
+        const normalizedOccupation = String(occupation || '').trim().toLowerCase();
+        const allowedOccupations = new Set(['', 'student', 'employed', 'self-employed']);
+        if (!allowedOccupations.has(normalizedOccupation)) {
+            const error = new Error('Invalid profile role selected.');
+            error.status = 400;
             throw error;
         }
 
-        updates.push('email = ?');
-        params.push(normalizedEmail);
-    }
-
-    if (avatarUrl !== undefined) {
-        updates.push('avatar_url = ?');
-        params.push(avatarUrl || null);
+        updates.push('occupation = ?');
+        params.push(normalizedOccupation || null);
     }
 
     if (newPassword) {

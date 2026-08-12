@@ -13,9 +13,6 @@
             <button id="dashboard-sidebar-close" class="dashboard-sidebar-close" type="button" aria-label="Close navigation">✕</button>
             <div class="sidebar-branding">
                 <img src="logo.png" alt="Vyom Logo" class="sidebar-logo">
-                <div class="sidebar-brand-text">
-                    <span>Real-time meetings and teams</span>
-                </div>
             </div>
 
             <nav class="sidebar-nav">
@@ -162,9 +159,23 @@
                     </label>
                     <label class="profile-form-grid__full">
                         Email
-                        <input type="email" id="profile-email" autocomplete="email" required>
+                        <input type="email" id="profile-email" autocomplete="email" readonly>
+                    </label>
+                    <label>
+                        Age
+                        <input type="number" id="profile-age" min="10" max="120" placeholder="Enter age">
+                    </label>
+                    <label>
+                        Using as
+                        <select id="profile-occupation">
+                            <option value="">Select role</option>
+                            <option value="student">Student</option>
+                            <option value="employed">Employed</option>
+                            <option value="self-employed">Self employed</option>
+                        </select>
                     </label>
                 </div>
+                <p class="profile-form-note">Email cannot be changed from profile settings.</p>
 
                 <div class="profile-form-section">
                     <div class="panel-header">

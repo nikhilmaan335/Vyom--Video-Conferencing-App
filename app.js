@@ -319,10 +319,9 @@ function wireAuthPage() {
         }
 
         if (providerFeedback) {
-            providerFeedback.textContent = 'Popup was blocked. Using the on-page social sign-in panel instead.';
+            providerFeedback.textContent = 'Popup blocked. Redirecting to secure social sign-in...';
         }
-
-        openSocialAuth(provider);
+        window.location.href = popupUrl;
     }
 
     window.addEventListener('message', async (event) => {
@@ -420,6 +419,15 @@ function wireAuthPage() {
                 if (providerFeedback) {
                     providerFeedback.textContent = 'Please enter your name and email.';
                 }
+                return;
+            }
+
+            if (['google', 'linkedin', 'facebook'].includes(String(provider).toLowerCase())) {
+                if (providerFeedback) {
+                    providerFeedback.textContent = `Continue using secure ${provider} sign-in to fetch your profile photo.`;
+                }
+                closeSocialAuth();
+                openSocialAuthPopup(provider);
                 return;
             }
 
@@ -2321,6 +2329,8 @@ async function loadDashboardPage(user) {
     const profileFirstNameInput = document.getElementById('profile-first-name');
     const profileLastNameInput = document.getElementById('profile-last-name');
     const profileEmailInput = document.getElementById('profile-email');
+    const profileAgeInput = document.getElementById('profile-age');
+    const profileOccupationInput = document.getElementById('profile-occupation');
     const profileCurrentPasswordInput = document.getElementById('profile-current-password');
     const profileNewPasswordInput = document.getElementById('profile-new-password');
     const profileConfirmPasswordInput = document.getElementById('profile-confirm-password');
@@ -2375,6 +2385,12 @@ async function loadDashboardPage(user) {
         }
         if (profileEmailInput) {
             profileEmailInput.value = profile.email || '';
+        }
+        if (profileAgeInput) {
+            profileAgeInput.value = profile.age ?? '';
+        }
+        if (profileOccupationInput) {
+            profileOccupationInput.value = profile.occupation || '';
         }
         if (profileCurrentPasswordInput) {
             profileCurrentPasswordInput.value = '';
@@ -2720,7 +2736,8 @@ async function loadDashboardPage(user) {
 
         const firstName = profileFirstNameInput?.value.trim();
         const lastName = profileLastNameInput?.value.trim();
-        const email = profileEmailInput?.value.trim();
+        const age = profileAgeInput?.value || '';
+        const occupation = profileOccupationInput?.value || '';
         const currentPassword = profileCurrentPasswordInput?.value || '';
         const newPassword = profileNewPasswordInput?.value || '';
         const confirmPassword = profileConfirmPasswordInput?.value || '';
@@ -2743,8 +2760,9 @@ async function loadDashboardPage(user) {
                 body: {
                     firstName,
                     lastName,
-                    email,
                     avatarUrl: profileAvatarDataUrl || null,
+                    age,
+                    occupation,
                     currentPassword,
                     newPassword
                 }
