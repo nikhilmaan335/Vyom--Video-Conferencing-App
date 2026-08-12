@@ -751,6 +751,8 @@ async function loadMeetingPage(user) {
     const participantsRoomCode = document.getElementById('participants-room-code');
     const meetingCopyLinkButton = document.getElementById('meeting-copy-link-button');
     const meetingFullscreenButton = document.getElementById('meeting-fullscreen-button');
+    const speakerMicIndicator = document.getElementById('speaker-mic-indicator');
+    const speakerCameraIndicator = document.getElementById('speaker-camera-indicator');
     const meetingRoomShell = document.querySelector('.meeting-room-shell');
     const morePanel = document.getElementById('more-panel');
     const morePanelClose = document.getElementById('more-panel-close');
@@ -1389,7 +1391,7 @@ async function loadMeetingPage(user) {
         }
 
         const isFullscreen = Boolean(document.fullscreenElement);
-        meetingFullscreenButton.textContent = isFullscreen ? '❐' : '⛶';
+        meetingFullscreenButton.textContent = isFullscreen ? 'Exit Full Screen' : 'Full Screen';
         meetingFullscreenButton.setAttribute('aria-label', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
         meetingFullscreenButton.setAttribute('title', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
     }
@@ -1896,6 +1898,58 @@ async function loadMeetingPage(user) {
         updateDrawerBadges();
     }
 
+    function applyAudioToggle(nextEnabled, shouldEmit = true) {
+        audioEnabled = Boolean(nextEnabled);
+        if (localStream) {
+            localStream.getAudioTracks().forEach((track) => {
+                track.enabled = audioEnabled;
+            });
+            refreshLocalAudioAnalyser();
+        }
+
+        if (muteToggleButton) {
+            muteToggleButton.innerHTML = `<span>${audioEnabled ? '🎙️' : '🔇'}</span><strong>${audioEnabled ? 'Mute' : 'Unmute'}</strong>`;
+        }
+        if (speakerMicIndicator) {
+            speakerMicIndicator.textContent = audioEnabled ? '🎙️' : '🔇';
+            speakerMicIndicator.setAttribute('aria-label', audioEnabled ? 'Mute microphone' : 'Unmute microphone');
+            speakerMicIndicator.setAttribute('title', audioEnabled ? 'Mute microphone' : 'Unmute microphone');
+        }
+
+        if (shouldEmit) {
+            pushStatePatch({ audioEnabled });
+        }
+        renderMeetingState();
+    }
+
+    function applyVideoToggle(nextEnabled, shouldEmit = true) {
+        videoEnabled = Boolean(nextEnabled);
+        if (localStream) {
+            localStream.getVideoTracks().forEach((track) => {
+                track.enabled = videoEnabled;
+            });
+        }
+
+        if (cameraToggleButton) {
+            cameraToggleButton.innerHTML = `<span>${videoEnabled ? '📷' : '🚫'}</span><strong>${videoEnabled ? 'Video' : 'Enable'}</strong>`;
+        }
+        if (speakerCameraIndicator) {
+            speakerCameraIndicator.textContent = videoEnabled ? '📷' : '🚫';
+            speakerCameraIndicator.setAttribute('aria-label', videoEnabled ? 'Turn camera off' : 'Turn camera on');
+            speakerCameraIndicator.setAttribute('title', videoEnabled ? 'Turn camera off' : 'Turn camera on');
+        }
+
+        refreshOutgoingVideoTrack();
+        if (shouldEmit) {
+            pushStatePatch({ videoEnabled });
+        }
+        renderMeetingState();
+    }
+
+    function navigateToDashboardWithoutMeetingHistory() {
+        window.location.replace('dashboard.html');
+    }
+
     socket.on('connect', () => {
         currentLocalSocketId = socket.id;
         ensureAudioContext();
@@ -2019,6 +2073,9 @@ async function loadMeetingPage(user) {
 
     socket.on('meeting:error', (message) => {
         alert(message);
+        if (/ended/i.test(String(message || ''))) {
+            navigateToDashboardWithoutMeetingHistory();
+        }
     });
 
     updateTimer();
@@ -2212,34 +2269,25 @@ async function loadMeetingPage(user) {
 
     if (muteToggleButton) {
         muteToggleButton.addEventListener('click', () => {
-            audioEnabled = !audioEnabled;
-            if (localStream) {
-                localStream.getAudioTracks().forEach((track) => {
-                    track.enabled = audioEnabled;
-                });
-            }
-            muteToggleButton.innerHTML = `<span>${audioEnabled ? '🎙️' : '🔇'}</span><strong>${audioEnabled ? 'Mute' : 'Unmute'}</strong>`;
-            if (localStream) {
-                refreshLocalAudioAnalyser();
-            }
-            pushStatePatch({ audioEnabled });
-            renderMeetingState();
+            applyAudioToggle(!audioEnabled);
         });
     }
 
     if (cameraToggleButton) {
         cameraToggleButton.addEventListener('click', () => {
-            videoEnabled = !videoEnabled;
-            if (localStream) {
-                localStream.getVideoTracks().forEach((track) => {
-                    track.enabled = videoEnabled;
-                });
-            }
+            applyVideoToggle(!videoEnabled);
+        });
+    }
 
-            cameraToggleButton.innerHTML = `<span>${videoEnabled ? '📷' : '🚫'}</span><strong>${videoEnabled ? 'Video' : 'Enable'}</strong>`;
-            refreshOutgoingVideoTrack();
-            pushStatePatch({ videoEnabled });
-            renderMeetingState();
+    if (speakerMicIndicator) {
+        speakerMicIndicator.addEventListener('click', () => {
+            applyAudioToggle(!audioEnabled);
+        });
+    }
+
+    if (speakerCameraIndicator) {
+        speakerCameraIndicator.addEventListener('click', () => {
+            applyVideoToggle(!videoEnabled);
         });
     }
 
@@ -2267,6 +2315,16 @@ async function loadMeetingPage(user) {
             peerConnections.forEach((connection, remoteSocketId) => {
                 closePeerConnection(remoteSocketId);
             });
+
+            const isHost = roomData.meeting.hostUserId === user.id;
+            if (isHost) {
+                try {
+                    await requestJson(`/api/meetings/${encodeURIComponent(activeRoomCode)}/end`, { method: 'POST' });
+                } catch (error) {
+                    alert(error.message || 'Unable to end meeting.');
+                }
+            }
+
             socket.emit('meeting:leave', { roomCode: activeRoomCode });
             if (screenShareStream) {
                 screenShareStream.getTracks().forEach((track) => track.stop());
@@ -2274,7 +2332,7 @@ async function loadMeetingPage(user) {
             if (audioLevelTimer) {
                 clearInterval(audioLevelTimer);
             }
-            setTimeout(redirectToDashboard, 150);
+            setTimeout(navigateToDashboardWithoutMeetingHistory, 150);
         });
     }
 
@@ -2308,6 +2366,8 @@ async function loadMeetingPage(user) {
     updateScreenShareButtonLabel();
     updateWhiteboardToolbar();
     generateAiSuggestions();
+    applyAudioToggle(audioEnabled, false);
+    applyVideoToggle(videoEnabled, false);
     renderMeetingState();
 }
 

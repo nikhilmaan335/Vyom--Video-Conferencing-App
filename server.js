@@ -291,6 +291,15 @@ function renderOAuthResultPage({ title, message, success = false, flowId = '', p
                     return;
                 }
 
+                if (payload && payload.token && payload.user) {
+                    try {
+                        localStorage.setItem('vyomAuthToken', payload.token);
+                        localStorage.setItem('vyomAuthUser', JSON.stringify(payload.user));
+                    } catch (error) {
+                        // Ignore localStorage access errors.
+                    }
+                }
+
                 if (redirectUrl) {
                     window.location.href = redirectUrl;
                 }

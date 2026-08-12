@@ -669,6 +669,12 @@ async function joinMeetingRoom({ roomCode, user }) {
         meeting = await db.get('SELECT * FROM meetings WHERE id = ?', [created.lastID]);
     }
 
+    if (meeting.status === 'ended') {
+        const error = new Error('This meeting has ended. Create a new meeting to continue.');
+        error.status = 409;
+        throw error;
+    }
+
     if (meeting.status === 'scheduled') {
         await db.run(
             `

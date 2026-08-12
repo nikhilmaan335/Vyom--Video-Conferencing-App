@@ -883,6 +883,7 @@ footer {
     max-height: min(88vh, 760px);
     overflow-y: auto;
     overscroll-behavior: contain;
+    padding-bottom: 0;
 }
 
 .profile-modal__header {
@@ -933,6 +934,7 @@ footer {
 .profile-form {
     display: grid;
     gap: 18px;
+    padding-bottom: 14px;
 }
 
 .profile-form-grid {
@@ -1010,8 +1012,12 @@ footer {
     justify-content: flex-end;
     position: sticky;
     bottom: 0;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0), var(--surface) 30%);
-    padding-top: 10px;
+    z-index: 3;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -10px 24px rgba(2, 6, 23, 0.18);
+    margin: 0 -28px -1px;
+    padding: 12px 28px 16px;
 }
 
 .profile-form-actions .primary-button,
@@ -1411,6 +1417,8 @@ footer {
 
     .profile-form-actions {
         flex-direction: column;
+        margin: 0 -22px -1px;
+        padding: 12px 22px 14px;
     }
 
     .profile-form-actions .primary-button,
