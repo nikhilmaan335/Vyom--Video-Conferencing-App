@@ -64,15 +64,23 @@
                         <p id="active-speaker-status">Join the room to start the conversation.</p>
                     </div>
                     <div class="speaker-stage__actions">
-                        <button class="mini-action-button" id="speaker-mic-indicator" type="button">🎙️</button>
-                        <button class="mini-action-button" id="speaker-camera-indicator" type="button">📷</button>
-                        <button class="mini-action-button" id="speaker-settings-button" type="button">⚙️</button>
+                        <button class="mini-action-button" id="speaker-settings-button" type="button" title="Devices & Settings">⚙️</button>
                     </div>
                 </div>
             </div>
         </section>
 
         <section class="participant-stack participant-stack--right" id="right-participant-stack" aria-label="Right participants"></section>
+
+        <aside class="meeting-drawer meeting-drawer--right" id="captions-drawer" aria-hidden="true">
+            <div class="meeting-drawer__header">
+                <h2>Live Captions</h2>
+                <button class="mini-action-button" id="captions-drawer-close" type="button">✕</button>
+            </div>
+            <div class="meeting-drawer__body" style="padding: 16px; display: flex; flex-direction: column;">
+                <div id="captions-overlay" style="flex: 1; overflow-y: auto; background: var(--bg-level-2, #f8f9fa); color: var(--text-primary, #333); padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: 400; font-family: inherit; line-height: 1.5; white-space: pre-wrap;"></div>
+            </div>
+        </aside>
 
         <aside class="meeting-drawer meeting-drawer--right" id="chat-drawer" aria-hidden="true">
             <div class="meeting-drawer__header">
@@ -91,6 +99,7 @@
                     <div class="chat-composer__actions">
                         <button class="secondary-button" id="chat-attach-image-button" type="button">Image</button>
                         <button class="secondary-button" id="chat-attach-file-button" type="button">File</button>
+                        <button class="secondary-button" id="chat-create-poll-button" type="button" title="Create Poll">Poll</button>
                         <button class="primary-button" type="submit">Send</button>
                     </div>
                 </form>
@@ -162,6 +171,18 @@
                             <strong>Whiteboard</strong>
                             <span>Draw together live</span>
                         </button>
+                        <button class="tool-card" id="blur-background-button" type="button">
+                            <strong>Blur BG</strong>
+                            <span>Toggle background blur</span>
+                        </button>
+                        <button class="tool-card" id="captions-button" type="button">
+                            <strong>Captions</strong>
+                            <span>Live Transcription</span>
+                        </button>
+                        <button class="tool-card" id="download-attendance-button" type="button" style="display: none;">
+                            <strong>Attendance</strong>
+                            <span>Download CSV</span>
+                        </button>
                         <button class="tool-card" id="ai-suggestions-button" type="button">
                             <strong>AI suggestions</strong>
                             <span>Get smart next steps</span>
@@ -231,6 +252,7 @@
             <button class="control-button" id="raise-hand-button" type="button">
                 <span>✋</span>
                 <strong>Hand</strong>
+                <span class="control-badge" id="hands-raised-badge" style="display: none;">0</span>
             </button>
             <button class="control-button" id="more-button" type="button">
                 <span>⋯</span>
