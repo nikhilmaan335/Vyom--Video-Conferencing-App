@@ -78,7 +78,29 @@
                 <button class="mini-action-button" id="captions-drawer-close" type="button">✕</button>
             </div>
             <div class="meeting-drawer__body" style="padding: 16px; display: flex; flex-direction: column;">
-                <div id="captions-overlay" style="flex: 1; overflow-y: auto; background: var(--bg-level-2, #f8f9fa); color: var(--text-primary, #333); padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: 400; font-family: inherit; line-height: 1.5; white-space: pre-wrap;"></div>
+                <div class="captions-toolbar">
+                    <label>Speech language
+                        <select id="captions-language-select">
+                            <option value="en-US">English</option>
+                            <option value="hi-IN">Hindi</option>
+                            <option value="es-ES">Spanish</option>
+                            <option value="fr-FR">French</option>
+                            <option value="de-DE">German</option>
+                        </select>
+                    </label>
+                    <label>Translate to
+                        <select id="captions-translation-language-select">
+                            <option value="off">Original</option>
+                            <option value="en">English</option>
+                            <option value="hi">Hindi</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                        </select>
+                    </label>
+                </div>
+                <div id="captions-overlay" class="captions-output"></div>
+                <div id="captions-translation" class="captions-output captions-output--translation" aria-live="polite"></div>
             </div>
         </aside>
 

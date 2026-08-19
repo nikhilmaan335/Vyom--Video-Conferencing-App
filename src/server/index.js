@@ -21,7 +21,8 @@ const {
     leaveMeetingRoom,
     endMeeting,
     getMeetingChatMessages,
-    saveMeetingChatMessage
+    saveMeetingChatMessage,
+    updateMeetingChatMessage
 } = require('../database');
 
 const app = express();
@@ -667,6 +668,7 @@ function formatMeetingState(meeting) {
         scheduledAt: meeting.scheduledAt,
         startedAt: meeting.startedAt,
         endedAt: meeting.endedAt,
+        hostUserId: meeting.hostUserId,
         host: meeting.host,
         participants,
         participantCount: participants.length,
@@ -919,6 +921,10 @@ app.post('/api/meetings/:roomCode/leave', requireAuth, async (req, res, next) =>
 app.post('/api/meetings/:roomCode/end', requireAuth, async (req, res, next) => {
     try {
         const meeting = await endMeeting(req.params.roomCode, req.user.id);
+        io.to(req.params.roomCode).emit('meeting:ended', {
+            roomCode: req.params.roomCode,
+            message: 'The host ended this meeting.'
+        });
         return res.json({ meeting: formatMeetingState(meeting) });
     } catch (error) {
         return next(error);
@@ -1100,6 +1106,64 @@ io.on('connection', (socket) => {
             });
         } catch (error) {
             socket.emit('meeting:error', error.message || 'Unable to send chat message.');
+        }
+    });
+
+    socket.on('meeting:poll-vote', async ({ roomCode, messageId, selections }) => {
+        try {
+            if (!roomCode || !messageId || !Array.isArray(selections)) {
+                throw new Error('A poll and at least one selection are required.');
+            }
+
+            const meeting = await getMeetingByRoomCode(roomCode);
+            if (!meeting) {
+                throw new Error('Meeting not found.');
+            }
+
+            const chatMessages = await getMeetingChatMessages(roomCode);
+            const pollMessage = chatMessages.find((item) => item.id === Number(messageId));
+            if (!pollMessage || !pollMessage.message.startsWith('[POLL]: ')) {
+                throw new Error('Poll not found.');
+            }
+
+            const poll = JSON.parse(pollMessage.message.slice(8));
+            const normalizedSelections = [...new Set(selections.map(Number))]
+                .filter((index) => Number.isInteger(index) && index >= 0 && index < poll.options.length);
+            if (!normalizedSelections.length) {
+                throw new Error('Choose at least one option.');
+            }
+            if (poll.selectionMode !== 'multi' && normalizedSelections.length > 1) {
+                throw new Error('This poll allows one selection only.');
+            }
+
+            poll.votes = Array.from({ length: poll.options.length }, (_, index) => Number(poll.votes?.[index] || 0));
+            const previousVoters = Array.isArray(poll.voters) ? poll.voters : [];
+            const previousVote = previousVoters.find((voter) => voter.userId === socket.user.id);
+            if (previousVote) {
+                previousVote.selections.forEach((index) => {
+                    poll.votes[index] = Math.max(0, poll.votes[index] - 1);
+                });
+            }
+            normalizedSelections.forEach((index) => {
+                poll.votes[index] += 1;
+            });
+            poll.voters = previousVoters.filter((voter) => voter.userId !== socket.user.id);
+            poll.voters.push({
+                userId: socket.user.id,
+                name: socket.user.name,
+                email: socket.user.email,
+                selections: normalizedSelections,
+                votedAt: new Date().toISOString()
+            });
+
+            const updatedMessage = await updateMeetingChatMessage(
+                roomCode,
+                Number(messageId),
+                `[POLL]: ${JSON.stringify(poll)}`
+            );
+            io.to(roomCode).emit('meeting:chat-message', { roomCode, message: updatedMessage, replace: true });
+        } catch (error) {
+            socket.emit('meeting:error', error.message || 'Unable to record poll vote.');
         }
     });
 

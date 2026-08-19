@@ -150,7 +150,9 @@ async function requestJson(path, options = {}) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-        throw new Error(data.message || 'Request failed.');
+        const error = new Error(data.message || 'Request failed.');
+        error.status = response.status;
+        throw error;
     }
 
     return data;
@@ -779,15 +781,21 @@ async function loadMeetingPage(user) {
     }
 
     const roomData = await requestJson(`/api/meetings/${encodeURIComponent(roomCode)}`);
+    if (roomData.meeting.status === 'ended') {
+        const error = new Error('This meeting has ended.');
+        error.status = 409;
+        throw error;
+    }
 
     // Prevent navigating back to dashboard unintentionally while in meeting.
     window.history.pushState({ inMeeting: true }, '', window.location.href);
-    window.addEventListener('popstate', (e) => {
+    const handleMeetingBackNavigation = () => {
         if (activeRoomCode) {
             alert('You are still in the meeting. Please use the "End" or "Leave" button to exit.');
             window.history.pushState({ inMeeting: true }, '', window.location.href);
         }
-    });
+    };
+    window.addEventListener('popstate', handleMeetingBackNavigation);
 
     const meetingTitle = document.getElementById('meeting-room-title');
     const meetingSubtitle = document.getElementById('meeting-room-subtitle');
@@ -854,6 +862,9 @@ async function loadMeetingPage(user) {
     const captionsOverlay = document.getElementById('captions-overlay');
     const captionsDrawer = document.getElementById('captions-drawer');
     const captionsDrawerClose = document.getElementById('captions-drawer-close');
+    const captionsLanguageSelect = document.getElementById('captions-language-select');
+    const captionsTranslationLanguageSelect = document.getElementById('captions-translation-language-select');
+    const captionsTranslation = document.getElementById('captions-translation');
     const chatCreatePollButton = document.getElementById('chat-create-poll-button');
     const aiSuggestionsList = document.getElementById('ai-suggestions-list');
     const chatAttachImageButton = document.getElementById('chat-attach-image-button');
@@ -905,6 +916,9 @@ async function loadMeetingPage(user) {
     let isBlurEnabled = false;
     let isCaptionsEnabled = false;
     let recognition = null;
+    let transcriptText = '';
+    let finalTranscriptText = '';
+    let translationRequestId = 0;
     let blurredStream = null;
     const whiteboardState = {
         isOpen: false,
@@ -1650,15 +1664,19 @@ async function loadMeetingPage(user) {
                     const pollData = JSON.parse(item.message.slice(8));
                     bubble = `
                         <div class="chat-message__bubble chat-message__poll" style="background-color: var(--color-gray-100); border: 1px solid var(--color-gray-300);">
-                            <strong>📊 ${escapeHtml(pollData.question)}</strong>
-                            <div style="margin-top: 8px;">
-                                ${pollData.options.map((opt, i) => `
-                                    <button class="secondary-button" style="width: 100%; margin-bottom: 4px; justify-content: space-between;" onclick="alert('Poll vote recorded for: ${escapeHtml(opt)}')">
-                                        <span>${escapeHtml(opt)}</span>
-                                        <span class="control-badge" style="position: static; font-size: 0.7rem;">${pollData.votes[i] || 0}</span>
-                                    </button>
-                                `).join('')}
+                                    <strong>📊 ${escapeHtml(pollData.question)}</strong>
+                                    <span class="chat-message__poll-mode">${pollData.selectionMode === 'multi' ? 'Choose multiple' : 'Choose one'}</span>
+                                    <div class="poll-options" data-poll-id="${item.id}">
+                                        ${pollData.options.map((opt, i) => `
+                                            <label class="poll-option">
+                                                <input type="${pollData.selectionMode === 'multi' ? 'checkbox' : 'radio'}" name="poll-${item.id}" value="${i}">
+                                                <span>${escapeHtml(opt)}</span>
+                                                ${roomData.meeting.hostUserId === user.id ? `<span class="control-badge poll-vote-count">${pollData.votes?.[i] || 0}</span>` : ''}
+                                            </label>
+                                        `).join('')}
+                                        <button class="secondary-button poll-vote-button" type="button" data-poll-id="${item.id}">Vote</button>
                             </div>
+                                    ${roomData.meeting.hostUserId === user.id && pollData.voters?.length ? `<div class="poll-voters"><strong>Responses</strong>${pollData.voters.map((voter) => `<div>${escapeHtml(voter.name)}: ${escapeHtml(voter.selections.map((index) => pollData.options[index]).join(', '))}</div>`).join('')}</div>` : ''}
                         </div>
                     `;
                 } catch(e) {
@@ -1682,6 +1700,22 @@ async function loadMeetingPage(user) {
         if (roomState.selectedDrawer === 'chat') {
             chatMessageList.scrollTop = chatMessageList.scrollHeight;
         }
+
+        chatMessageList.querySelectorAll('.poll-vote-button').forEach((button) => {
+            button.addEventListener('click', () => {
+                const pollOptions = chatMessageList.querySelector(`[data-poll-id="${button.dataset.pollId}"]`);
+                const selections = Array.from(pollOptions.querySelectorAll('input:checked')).map((input) => Number(input.value));
+                if (!selections.length) {
+                    alert('Choose at least one option.');
+                    return;
+                }
+                socket.emit('meeting:poll-vote', {
+                    roomCode: activeRoomCode,
+                    messageId: Number(button.dataset.pollId),
+                    selections
+                });
+            });
+        });
     }
 
     function updateDeviceSelectors() {
@@ -2042,6 +2076,17 @@ async function loadMeetingPage(user) {
         updateDrawerBadges();
     }
 
+    function replaceChatMessage(message) {
+        const index = chatMessages.findIndex((item) => item.id === message.id);
+        if (index === -1) {
+            appendChatMessage(message);
+            return;
+        }
+
+        chatMessages[index] = message;
+        renderChatDrawer();
+    }
+
     function applyRaiseHandToggle(nextRaised, shouldEmit = true) {
         const handRaised = Boolean(nextRaised);
         if (raiseHandButton) {
@@ -2099,7 +2144,37 @@ async function loadMeetingPage(user) {
     }
 
     function navigateToDashboardWithoutMeetingHistory() {
+        activeRoomCode = '';
+        window.removeEventListener('popstate', handleMeetingBackNavigation);
         window.location.replace('dashboard.html');
+    }
+
+    async function translateTranscript(text) {
+        const targetLanguage = captionsTranslationLanguageSelect?.value || 'off';
+        if (!captionsTranslation || targetLanguage === 'off' || !String(text || '').trim()) {
+            if (captionsTranslation) captionsTranslation.textContent = '';
+            return;
+        }
+
+        const requestId = ++translationRequestId;
+        captionsTranslation.textContent = 'Translating...';
+        try {
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLanguage)}&dt=t&q=${encodeURIComponent(text)}`;
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error('Translation service unavailable.');
+            }
+            const data = await response.json();
+            if (requestId === translationRequestId) {
+                captionsTranslation.textContent = Array.isArray(data?.[0])
+                    ? data[0].map((part) => part[0]).join('')
+                    : 'Translation unavailable.';
+            }
+        } catch (error) {
+            if (requestId === translationRequestId) {
+                captionsTranslation.textContent = 'Translation unavailable. Check your connection.';
+            }
+        }
     }
 
     socket.on('connect', () => {
@@ -2135,9 +2210,9 @@ async function loadMeetingPage(user) {
         updateDrawerBadges();
     });
 
-    socket.on('meeting:chat-message', ({ message }) => {
+    socket.on('meeting:chat-message', ({ message, replace = false }) => {
         if (message) {
-            appendChatMessage(message);
+            replace ? replaceChatMessage(message) : appendChatMessage(message);
         }
     });
 
@@ -2230,6 +2305,11 @@ async function loadMeetingPage(user) {
         if (/ended/i.test(String(message || ''))) {
             navigateToDashboardWithoutMeetingHistory();
         }
+    });
+
+    socket.on('meeting:ended', ({ message }) => {
+        alert(message || 'The host ended this meeting.');
+        navigateToDashboardWithoutMeetingHistory();
     });
 
     updateTimer();
@@ -2326,16 +2406,24 @@ async function loadMeetingPage(user) {
     }
     if (chatCreatePollButton) {
         chatCreatePollButton.addEventListener('click', () => {
-            const question = prompt('Enter your poll question:');
+            const question = prompt('Enter your poll question:')?.trim();
             if (!question) return;
-            const option1 = prompt('Option 1:');
-            const option2 = prompt('Option 2:');
-            if (question && option1 && option2) {
+            const quantity = Math.min(8, Math.max(2, Number(prompt('How many options? (2-8)', '3')) || 0));
+            if (!quantity) return;
+            const options = Array.from({ length: quantity }, (_, index) => prompt(`Option ${index + 1}:`)?.trim()).filter(Boolean);
+            if (options.length < 2) {
+                alert('A poll needs at least two options.');
+                return;
+            }
+            const selectionMode = prompt('Type single for one choice or multi for multiple choices:', 'single')?.trim().toLowerCase() === 'multi' ? 'multi' : 'single';
+            if (question && options.length >= 2) {
                 const pollData = JSON.stringify({
                     type: 'poll',
                     question,
-                    options: [option1, option2],
-                    votes: { 0: 0, 1: 0 }
+                    options,
+                    selectionMode,
+                    votes: options.map(() => 0),
+                    voters: []
                 });
                 socket.emit('meeting:chat-message', {
                     roomCode: activeRoomCode,
@@ -2376,14 +2464,29 @@ async function loadMeetingPage(user) {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (SpeechRecognition) {
                     recognition = new SpeechRecognition();
+                    recognition.lang = captionsLanguageSelect?.value || 'en-US';
                     recognition.continuous = true;
                     recognition.interimResults = true;
                     recognition.onresult = (event) => {
-                        const transcript = Array.from(event.results)
-                            .map(result => result[0])
-                            .map(result => result.transcript)
-                            .join('');
-                        if (captionsOverlay) captionsOverlay.textContent = transcript;
+                        finalTranscriptText = Array.from(event.results)
+                            .filter((result) => result.isFinal)
+                            .map((result) => result[0].transcript)
+                            .join(' ');
+                        const interimTranscript = Array.from(event.results)
+                            .filter((result) => !result.isFinal)
+                            .map((result) => result[0].transcript)
+                            .join(' ');
+                        transcriptText = `${finalTranscriptText} ${interimTranscript}`.trim();
+                        if (captionsOverlay) captionsOverlay.textContent = transcriptText || 'Listening...';
+                        translateTranscript(transcriptText);
+                    };
+                    recognition.onerror = (event) => {
+                        if (captionsOverlay) captionsOverlay.textContent = `Transcription error: ${event.error}`;
+                    };
+                    recognition.onend = () => {
+                        if (isCaptionsEnabled) {
+                            try { recognition.start(); } catch (error) { /* Browser may already be restarting. */ }
+                        }
                     };
                     recognition.start();
                 } else {
@@ -2392,6 +2495,17 @@ async function loadMeetingPage(user) {
                 }
             }
         });
+    }
+    if (captionsLanguageSelect) {
+        captionsLanguageSelect.addEventListener('change', () => {
+            if (recognition && isCaptionsEnabled) {
+                recognition.lang = captionsLanguageSelect.value;
+                recognition.stop();
+            }
+        });
+    }
+    if (captionsTranslationLanguageSelect) {
+        captionsTranslationLanguageSelect.addEventListener('change', () => translateTranscript(transcriptText));
     }
     if (blurBackgroundButton) {
         blurBackgroundButton.addEventListener('click', () => {
@@ -3246,7 +3360,16 @@ async function bootstrap() {
             return;
         }
 
-        await loadMeetingPage(currentUser);
+        try {
+            await loadMeetingPage(currentUser);
+        } catch (error) {
+            if (error.status === 409 || /ended/i.test(String(error.message || ''))) {
+                alert('This meeting has ended. Returning to your dashboard.');
+                window.location.replace('dashboard.html');
+                return;
+            }
+            throw error;
+        }
     }
 }
 

@@ -884,6 +884,56 @@ async function saveMeetingChatMessage(roomCode, userId, message) {
     };
 }
 
+async function updateMeetingChatMessage(roomCode, messageId, message) {
+    const db = await getDatabase();
+    const meeting = await db.get('SELECT * FROM meetings WHERE room_code = ?', [roomCode]);
+    if (!meeting) {
+        const error = new Error('Meeting not found.');
+        error.status = 404;
+        throw error;
+    }
+
+    const content = String(message || '').trim();
+    if (!content) {
+        const error = new Error('Message is required.');
+        error.status = 400;
+        throw error;
+    }
+
+    await db.run(
+        'UPDATE chat_messages SET message = ? WHERE id = ? AND meeting_id = ?',
+        [content, messageId, meeting.id]
+    );
+
+    const row = await db.get(
+        `
+            SELECT chat_messages.*, users.first_name, users.last_name, users.email
+            FROM chat_messages
+            JOIN users ON users.id = chat_messages.user_id
+            WHERE chat_messages.id = ? AND chat_messages.meeting_id = ?
+        `,
+        [messageId, meeting.id]
+    );
+
+    if (!row) {
+        const error = new Error('Poll message not found.');
+        error.status = 404;
+        throw error;
+    }
+
+    return {
+        id: row.id,
+        roomCode,
+        message: row.message,
+        createdAt: row.created_at,
+        author: {
+            id: row.user_id,
+            name: `${row.first_name || ''} ${row.last_name || ''}`.trim() || row.email.split('@')[0],
+            email: row.email
+        }
+    };
+}
+
 module.exports = {
     getDatabase,
     normalizeEmail,
@@ -903,5 +953,6 @@ module.exports = {
     leaveMeetingRoom,
     endMeeting,
     getMeetingChatMessages,
-    saveMeetingChatMessage
+    saveMeetingChatMessage,
+    updateMeetingChatMessage
 };
