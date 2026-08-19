@@ -779,7 +779,7 @@ async function loadMeetingPage(user) {
     }
 
     const roomData = await requestJson(`/api/meetings/${encodeURIComponent(roomCode)}`);
-    
+
     // Prevent navigating back to dashboard unintentionally while in meeting.
     window.history.pushState({ inMeeting: true }, '', window.location.href);
     window.addEventListener('popstate', (e) => {
@@ -1643,7 +1643,7 @@ async function loadMeetingPage(user) {
         chatMessageList.innerHTML = chatMessages.map((item) => {
             const isSelf = item.author.email === user.email;
             const attachmentMessage = parseAttachmentMessage(item.message);
-            
+
             let bubble = '';
             if (item.message.startsWith('[POLL]: ')) {
                 try {
@@ -2372,7 +2372,7 @@ async function loadMeetingPage(user) {
                 captionsButton.classList.add('is-active');
                 setDrawerState('captions', true);
                 if (captionsOverlay) captionsOverlay.textContent = 'Listening...';
-                
+
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (SpeechRecognition) {
                     recognition = new SpeechRecognition();
@@ -2397,13 +2397,13 @@ async function loadMeetingPage(user) {
         blurBackgroundButton.addEventListener('click', () => {
             isBlurEnabled = !isBlurEnabled;
             blurBackgroundButton.classList.toggle('is-active', isBlurEnabled);
-            
+
             // To simulate exactly "background blur toggle" without crashing legacy systems:
             if (speakerVideo && localStream) {
                 if (isBlurEnabled) {
-                    // Just applying CSS blur to represent it for now 
+                    // Just applying CSS blur to represent it for now
                     // since real canvas WebGL is too heavy and requires BodyPix/Mediapipe setup.
-                    speakerVideo.style.filter = 'blur(10px)'; 
+                    speakerVideo.style.filter = 'blur(10px)';
                 } else {
                     speakerVideo.style.filter = '';
                 }
