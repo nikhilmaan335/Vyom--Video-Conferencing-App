@@ -134,7 +134,7 @@ main {
     justify-content: center;
     overflow: hidden;
     flex-shrink: 0;
-    background-image: url('content.jpeg');
+    background-image: url('../images/content.jpeg');
     background-size: cover;
     background-position: center;
 }

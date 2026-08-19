@@ -2663,7 +2663,7 @@ async function loadDashboardPage(user) {
     }
 
     function updateProfileImage(source) {
-        const resolvedSource = source || 'logo.png';
+        const resolvedSource = source || 'assets/images/logo.png';
         if (userAvatar) {
             userAvatar.src = resolvedSource;
         }
@@ -2699,7 +2699,7 @@ async function loadDashboardPage(user) {
         }
 
         profileAvatarDataUrl = profile.avatarUrl || '';
-        updateProfileImage(profileAvatarDataUrl || 'logo.png');
+        updateProfileImage(profileAvatarDataUrl || 'assets/images/logo.png');
 
         if (profileFormStatus) {
             profileFormStatus.textContent = '';
@@ -2993,7 +2993,7 @@ async function loadDashboardPage(user) {
     if (userEmail) {
         userEmail.textContent = dashboardData.profile.email;
     }
-    updateProfileImage(dashboardData.profile.avatarUrl || 'logo.png');
+    updateProfileImage(dashboardData.profile.avatarUrl || 'assets/images/logo.png');
 
     renderOverview(dashboardData);
     renderTeamList(dashboardData.teams);
@@ -3066,7 +3066,7 @@ async function loadDashboardPage(user) {
             });
 
             dashboardData.profile = response.user;
-            updateProfileImage(response.user.avatarUrl || 'logo.png');
+            updateProfileImage(response.user.avatarUrl || 'assets/images/logo.png');
             if (userName) {
                 userName.textContent = response.user.name;
             }

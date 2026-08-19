@@ -5,22 +5,45 @@ Unlike traditional communication apps, **VYOM** focuses on a lightweight, intuit
 
 ---
 
-## 🚀 Key Features
-* **Real-Time P2P Video & Audio:** High-definition video and crisp audio powered by WebRTC.
-* **Instant Room Creation & Joining:** Generate secure, unique meeting links instantly.
-* **In-Meeting Live Chat:** Real-time text messaging alongside video stream using Socket.io.
-* **Interactive Controls:** Easy toggle for Mute/Unmute Audio, Turn On/Off Video, and Screen Sharing.
-* **Secure Authentication:** User signup, login, and meeting history managed via JWT & MongoDB.
-* **Responsive UI:** Beautiful and clean design tailored for both desktops and tablets.
+## Key Features
+* **Real-time video and audio:** Browser WebRTC streams with Socket.IO signaling.
+* **Meeting rooms:** Create, schedule, join, leave, and end meetings with shareable room codes.
+* **Collaboration:** In-meeting chat, screen sharing, participant presence, and a whiteboard.
+* **Authentication:** Local accounts plus optional Google, LinkedIn, and Facebook OAuth.
+* **Dashboard:** Teams, upcoming meetings, history, profile settings, and theme preferences.
 
 ---
 
-## 🛠️ Tech Stack
-* **Frontend:** React.js, Context API / Redux, Bootstrap CSS / Material UI
-* **Backend:** Node.js, Express.js
-* **Database:** MongoDB (with Mongoose ORM)
-* **Real-Time Communication:** WebRTC (Peer-to-Peer Audio/Video) & Socket.io (Signaling & Chat)
-* **Version Control & Collaboration:** Git & GitHub
+## Tech Stack
+* **Frontend:** HTML, CSS, and browser JavaScript.
+* **Backend:** Node.js, Express, and Socket.IO.
+* **Database:** SQLite with the `sqlite` and `sqlite3` packages.
+* **Media:** WebRTC APIs for peer-to-peer audio and video.
+
+## Project Structure
+```text
+public/
+	index.html, sign-in.html, dashboard.html, meeting.html
+	social-auth-popup.html
+	assets/
+		css/       Shared and responsive stylesheets
+		images/    Logos and other static images
+		js/        Browser-side application logic
+src/
+	server/index.js       Express API, OAuth, and Socket.IO server
+	database/index.js     SQLite connection, schema, and data access
+data/                    Local SQLite database (created at runtime)
+```
+
+The browser application remains in one client entry point because authentication, dashboard state, and the WebRTC meeting lifecycle share browser state and events. The backend and database are separated by responsibility without splitting tightly coupled meeting code into fragile fragments.
+
+## Run Locally
+```bash
+npm install
+npm start
+```
+
+Open `http://localhost:3000` in a browser. The SQLite database is created automatically at `data/vyom.sqlite`.
 
 ---
 

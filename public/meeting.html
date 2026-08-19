@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vyom Meeting Room</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body class="meeting-room-page">
     <header class="meeting-room-header">
         <div class="meeting-branding">
-            <img src="logo.png" alt="Vyom Logo" class="meeting-brand-logo">
+            <img src="assets/images/logo.png" alt="Vyom Logo" class="meeting-brand-logo">
             <div>
                 <strong id="meeting-room-title">Meeting Room</strong>
                 <span id="meeting-room-subtitle">Loading meeting details...</span>
@@ -57,7 +57,7 @@
             <div class="speaker-stage__frame">
                 <span class="speaker-stage__badge">Active Speaker</span>
                 <video id="active-speaker-video" class="speaker-stage__video" autoplay playsinline muted></video>
-                <img id="active-speaker-avatar" class="speaker-stage__avatar" src="logo.png" alt="Active speaker avatar">
+                <img id="active-speaker-avatar" class="speaker-stage__avatar" src="assets/images/logo.png" alt="Active speaker avatar">
                 <div class="speaker-stage__overlay">
                     <div>
                         <h1 id="active-speaker-name">Waiting for participants</h1>
@@ -270,6 +270,6 @@
     </main>
 
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
-    <script src="app.js"></script>
+    <script src="assets/js/app.js"></script>
 </body>
 </html>

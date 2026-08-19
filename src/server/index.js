@@ -22,7 +22,7 @@ const {
     endMeeting,
     getMeetingChatMessages,
     saveMeetingChatMessage
-} = require('./database');
+} = require('../database');
 
 const app = express();
 const server = http.createServer(app);
@@ -64,7 +64,7 @@ function loadEnvFile(filePath) {
     }
 }
 
-loadEnvFile(path.join(__dirname, '.env'));
+loadEnvFile(path.join(__dirname, '../../.env'));
 
 const PORT = process.env.PORT || 3000;
 const roomPresence = new Map();
@@ -734,7 +734,7 @@ function broadcastWhiteboardState(roomCode) {
 }
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, '../../public/index.html'));
 });
 
 app.post('/api/auth/register', async (req, res, next) => {
@@ -925,7 +925,7 @@ app.post('/api/meetings/:roomCode/end', requireAuth, async (req, res, next) => {
     }
 });
 
-app.use(express.static(__dirname, { extensions: ['html'] }));
+app.use(express.static(path.join(__dirname, '../../public'), { extensions: ['html'] }));
 
 app.use((error, req, res, next) => {
     console.error(error);

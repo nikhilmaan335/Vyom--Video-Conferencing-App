@@ -1,3 +1,4 @@
 node_modules/
 vyom.sqlite
+data/*.sqlite
 .env

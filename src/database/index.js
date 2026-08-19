@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 
-const databasePath = path.join(__dirname, 'vyom.sqlite');
+const databasePath = path.join(__dirname, '../../data/vyom.sqlite');
 let databasePromise;
 
 function normalizeEmail(email) {
