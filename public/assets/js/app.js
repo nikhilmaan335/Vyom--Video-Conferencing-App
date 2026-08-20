@@ -862,10 +862,6 @@ async function loadMeetingPage(user) {
     const meetingRoomShell = document.querySelector('.meeting-room-shell');
     const morePanel = document.getElementById('more-panel');
     const morePanelClose = document.getElementById('more-panel-close');
-    const shareScreenOptionButton = document.getElementById('share-screen-option');
-    const shareWindowOptionButton = document.getElementById('share-window-option');
-    const shareTabOptionButton = document.getElementById('share-tab-option');
-    const stopShareOptionButton = document.getElementById('stop-share-option');
     const openWhiteboardButton = document.getElementById('open-whiteboard-button');
     const aiSuggestionsButton = document.getElementById('ai-suggestions-button');
     const stageBgToggle = document.getElementById('stage-bg-toggle');
@@ -2631,30 +2627,6 @@ async function loadMeetingPage(user) {
     }
     if (speakerSettingsButton) {
         speakerSettingsButton.addEventListener('click', () => setDrawerState('devices', roomState.selectedDrawer !== 'devices'));
-    }
-    if (shareScreenOptionButton) {
-        shareScreenOptionButton.addEventListener('click', async () => {
-            closeMorePanel();
-            await startScreenShare('screen');
-        });
-    }
-    if (shareWindowOptionButton) {
-        shareWindowOptionButton.addEventListener('click', async () => {
-            closeMorePanel();
-            await startScreenShare('window');
-        });
-    }
-    if (shareTabOptionButton) {
-        shareTabOptionButton.addEventListener('click', async () => {
-            closeMorePanel();
-            await startScreenShare('tab');
-        });
-    }
-    if (stopShareOptionButton) {
-        stopShareOptionButton.addEventListener('click', () => {
-            stopScreenShare();
-            closeMorePanel();
-        });
     }
     if (openWhiteboardButton) {
         openWhiteboardButton.addEventListener('click', () => {
