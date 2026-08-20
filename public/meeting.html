@@ -12,11 +12,14 @@
             <img src="assets/images/logo.png" alt="Vyom Logo" class="meeting-brand-logo">
             <div>
                 <strong id="meeting-room-title">Meeting Room</strong>
-                <span id="meeting-room-subtitle">Loading meeting details...</span>
             </div>
         </div>
 
         <div class="meeting-header-actions">
+            <button id="meeting-hands-chip" class="meeting-hands-chip is-hidden" type="button" title="Raised hands" aria-label="Raised hands">
+                <span aria-hidden="true">✋</span>
+                <strong id="meeting-hands-count">0</strong>
+            </button>
             <button id="meeting-copy-link-button" class="secondary-button meeting-header-button" type="button">Copy Link</button>
             <button id="meeting-fullscreen-button" class="icon-button meeting-header-button" type="button" aria-label="Toggle fullscreen">⛶</button>
             <span class="meeting-timer" id="meeting-timer">45:12</span>
@@ -56,6 +59,7 @@
         <section class="speaker-stage">
             <div class="speaker-stage__frame">
                 <span class="speaker-stage__badge">Active Speaker</span>
+                <span class="raised-hand-badge is-hidden" id="stage-hand-badge" title="Hand raised" aria-label="Hand raised">✋</span>
                 <video id="active-speaker-video" class="speaker-stage__video" autoplay playsinline muted></video>
                 <img id="active-speaker-avatar" class="speaker-stage__avatar" src="assets/images/logo.png" alt="Active speaker avatar">
                 <div class="speaker-stage__overlay">
@@ -63,8 +67,7 @@
                         <h1 id="active-speaker-name">Waiting for participants</h1>
                         <p id="active-speaker-status">Join the room to start the conversation.</p>
                     </div>
-                    <div class="speaker-stage__actions">
-                        <button class="mini-action-button" id="speaker-settings-button" type="button" title="Devices & Settings">⚙️</button>
+                    <div class="speaker-stage__actions">                        <button class="mini-action-button is-hidden" id="stage-bg-toggle" type="button" data-action="toggle-bg" title="Replace background" aria-pressed="false">🪄</button>                        <button class="mini-action-button" id="speaker-settings-button" type="button" title="Devices & Settings">⚙️</button>
                     </div>
                 </div>
             </div>
@@ -193,10 +196,6 @@
                             <strong>Whiteboard</strong>
                             <span>Draw together live</span>
                         </button>
-                        <button class="tool-card" id="blur-background-button" type="button">
-                            <strong>Blur BG</strong>
-                            <span>Toggle background blur</span>
-                        </button>
                         <button class="tool-card" id="captions-button" type="button">
                             <strong>Captions</strong>
                             <span>Live Transcription</span>
@@ -292,6 +291,7 @@
     </main>
 
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/selfie_segmentation.js" crossorigin="anonymous"></script>
     <script src="assets/js/app.js"></script>
 </body>
 </html>

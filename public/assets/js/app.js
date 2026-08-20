@@ -667,11 +667,17 @@ function getParticipantInitials(name) {
         .toUpperCase() || 'V';
 }
 
-function createParticipantCard(participant, variant = 'default', stream = null, isSpeaking = false) {
+function createParticipantCard(participant, variant = 'default', stream = null, isSpeaking = false, isSelf = false) {
     const card = document.createElement('article');
     card.className = `participant-card participant-card--${variant}`;
     if (isSpeaking) {
         card.classList.add('is-speaking');
+    }
+    if (participant.handRaised) {
+        card.classList.add('is-hand-raised');
+    }
+    if (isSelf) {
+        card.classList.add('is-self');
     }
     card.dataset.participantKey = getParticipantKey(participant);
 
@@ -681,6 +687,8 @@ function createParticipantCard(participant, variant = 'default', stream = null, 
     card.innerHTML = `
         <video class="participant-card__video ${hasStream ? '' : 'is-hidden'}" autoplay playsinline></video>
         <div class="participant-avatar participant-avatar--fallback ${hasStream ? 'is-hidden' : ''}">${escapeHtml(initials)}</div>
+        ${participant.handRaised ? '<span class="raised-hand-badge" title="Hand raised" aria-label="Hand raised">✋</span>' : ''}
+        ${isSelf ? '<button class="bg-effect-toggle" type="button" data-action="toggle-bg" title="Replace background" aria-label="Replace background" aria-pressed="false">🪄</button>' : ''}
         <div class="participant-card__footer">
             <strong>${escapeHtml(participant.name)}</strong>
             <span>${participant.isHost ? 'Host' : participant.handRaised ? 'Hand raised' : 'Participant'}</span>
@@ -688,7 +696,6 @@ function createParticipantCard(participant, variant = 'default', stream = null, 
         <div class="participant-card__actions">
             <span>${participant.audioEnabled ? '🎙️' : '🔇'}</span>
             <span>${participant.videoEnabled ? '📷' : '🚫'}</span>
-            <span>${participant.handRaised ? '✋' : '•'}</span>
         </div>
     `;
 
@@ -718,6 +725,7 @@ function updateSpeakerStage(state, currentUser, localStream, activeStream, shoul
     const speakerStatus = document.getElementById('active-speaker-status');
     const speakerAvatar = document.getElementById('active-speaker-avatar');
     const speakerVideo = document.getElementById('active-speaker-video');
+    const speakerHandBadge = document.getElementById('stage-hand-badge');
 
     const activeSpeaker = state.activeSpeaker || state.participants[0] || {
         name: currentUser.name,
@@ -725,6 +733,10 @@ function updateSpeakerStage(state, currentUser, localStream, activeStream, shoul
         videoEnabled: false,
         handRaised: false
     };
+
+    if (speakerHandBadge) {
+        speakerHandBadge.classList.toggle('is-hidden', !activeSpeaker.handRaised);
+    }
 
     if (speakerName) {
         speakerName.textContent = activeSpeaker.name;
@@ -856,7 +868,9 @@ async function loadMeetingPage(user) {
     const stopShareOptionButton = document.getElementById('stop-share-option');
     const openWhiteboardButton = document.getElementById('open-whiteboard-button');
     const aiSuggestionsButton = document.getElementById('ai-suggestions-button');
-    const blurBackgroundButton = document.getElementById('blur-background-button');
+    const stageBgToggle = document.getElementById('stage-bg-toggle');
+    const handsChip = document.getElementById('meeting-hands-chip');
+    const handsChipCount = document.getElementById('meeting-hands-count');
     const captionsButton = document.getElementById('captions-button');
     const downloadAttendanceButton = document.getElementById('download-attendance-button');
     const captionsOverlay = document.getElementById('captions-overlay');
@@ -913,13 +927,26 @@ async function loadMeetingPage(user) {
     let audioLevelTimer = null;
     let whiteboardContext = null;
     let whiteboardResizeTimer = null;
-    let isBlurEnabled = false;
     let isCaptionsEnabled = false;
     let recognition = null;
     let transcriptText = '';
     let finalTranscriptText = '';
     let translationRequestId = 0;
-    let blurredStream = null;
+    const isLocalHost = roomData?.meeting?.hostUserId === user.id;
+    const virtualBackground = {
+        enabled: false,
+        busy: false,
+        running: false,
+        sending: false,
+        lastResultAt: 0,
+        watchdog: null,
+        segmenter: null,
+        sourceVideo: null,
+        canvas: null,
+        ctx: null,
+        rawTrack: null,
+        outputTrack: null
+    };
     const whiteboardState = {
         isOpen: false,
         activeColor: '#3af6ff',
@@ -933,6 +960,223 @@ async function loadMeetingPage(user) {
         }
 
         return participant.socketId || participant.userId || participant.email || participant.name;
+    }
+
+    function isSelfParticipant(participant) {
+        if (!participant) {
+            return false;
+        }
+
+        return (currentLocalSocketId && participant.socketId === currentLocalSocketId)
+            || (Boolean(participant.email) && participant.email === user.email);
+    }
+
+    function refreshBackgroundToggleUi() {
+        const label = virtualBackground.enabled ? 'Restore real background' : 'Replace background';
+        document.querySelectorAll('[data-action="toggle-bg"]').forEach((toggle) => {
+            toggle.classList.toggle('is-active', virtualBackground.enabled);
+            toggle.setAttribute('aria-pressed', String(virtualBackground.enabled));
+            toggle.setAttribute('title', label);
+            toggle.setAttribute('aria-label', label);
+        });
+    }
+
+    function swapLocalVideoTrack(nextTrack) {
+        const audioTracks = localStream ? localStream.getAudioTracks() : [];
+        localStream = new MediaStream(nextTrack ? [...audioTracks, nextTrack] : audioTracks);
+        refreshOutgoingVideoTrack();
+        renderMeetingState();
+    }
+
+    async function ensureSegmenter() {
+        if (virtualBackground.segmenter) {
+            return virtualBackground.segmenter;
+        }
+
+        if (typeof SelfieSegmentation === 'undefined') {
+            throw new Error('Background effects could not load. Check your connection and try again.');
+        }
+
+        const segmenter = new SelfieSegmentation({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/${file}`
+        });
+        segmenter.setOptions({ modelSelection: 1, selfieMode: false });
+        segmenter.onResults(drawSegmentedFrame);
+        virtualBackground.segmenter = segmenter;
+        return segmenter;
+    }
+
+    // Keeps the segmented person pixels and paints a clean white plate behind them.
+    function drawSegmentedFrame(results) {
+        const { canvas, ctx } = virtualBackground;
+        if (!canvas || !ctx || !results?.image || !results?.segmentationMask) {
+            return;
+        }
+
+        virtualBackground.lastResultAt = Date.now();
+        ctx.save();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = 'source-in';
+        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = 'destination-over';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+    }
+
+    // Falls back to the untouched camera frame so the tile is never blank while the model warms up.
+    function drawPassthroughFrame() {
+        const { canvas, ctx, sourceVideo } = virtualBackground;
+        if (!canvas || !ctx || !sourceVideo || sourceVideo.readyState < 2) {
+            return;
+        }
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+    }
+
+    async function pumpSegmentationFrames() {
+        if (!virtualBackground.running) {
+            return;
+        }
+
+        const { segmenter, sourceVideo } = virtualBackground;
+        if (Date.now() - virtualBackground.lastResultAt > 300) {
+            drawPassthroughFrame();
+        }
+
+        try {
+            if (segmenter && sourceVideo && sourceVideo.readyState >= 2 && !virtualBackground.sending) {
+                virtualBackground.sending = true;
+                await segmenter.send({ image: sourceVideo });
+            }
+        } catch (error) {
+            console.warn('Background segmentation frame failed:', error.message);
+        } finally {
+            virtualBackground.sending = false;
+        }
+
+        if (virtualBackground.running) {
+            requestAnimationFrame(() => {
+                pumpSegmentationFrames();
+            });
+        }
+    }
+
+    async function enableVirtualBackground() {
+        const rawTrack = localStream?.getVideoTracks()?.[0];
+        if (!rawTrack) {
+            throw new Error('Turn your camera on before changing the background.');
+        }
+
+        const segmenter = await ensureSegmenter();
+        const sourceVideo = document.createElement('video');
+        sourceVideo.className = 'vb-source-video';
+        sourceVideo.playsInline = true;
+        sourceVideo.muted = true;
+        sourceVideo.autoplay = true;
+        sourceVideo.srcObject = new MediaStream([rawTrack]);
+        document.body.appendChild(sourceVideo);
+        await sourceVideo.play();
+        await waitForVideoFrame(sourceVideo);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = sourceVideo.videoWidth || 640;
+        canvas.height = sourceVideo.videoHeight || 480;
+
+        virtualBackground.segmenter = segmenter;
+        virtualBackground.rawTrack = rawTrack;
+        virtualBackground.sourceVideo = sourceVideo;
+        virtualBackground.canvas = canvas;
+        virtualBackground.ctx = canvas.getContext('2d');
+        virtualBackground.lastResultAt = 0;
+        virtualBackground.sending = false;
+        virtualBackground.running = true;
+        drawPassthroughFrame();
+        pumpSegmentationFrames();
+
+        const outputTrack = canvas.captureStream(24).getVideoTracks()[0];
+        outputTrack.enabled = videoEnabled;
+        virtualBackground.outputTrack = outputTrack;
+        virtualBackground.enabled = true;
+        swapLocalVideoTrack(outputTrack);
+
+        virtualBackground.watchdog = window.setTimeout(() => {
+            if (virtualBackground.enabled && !virtualBackground.lastResultAt) {
+                disableVirtualBackground();
+                refreshBackgroundToggleUi();
+                alert('Background effects could not start on this device, so your normal camera is back on.');
+            }
+        }, 8000);
+    }
+
+    function waitForVideoFrame(video) {
+        if (video.readyState >= 2 && video.videoWidth) {
+            return Promise.resolve();
+        }
+
+        return new Promise((resolve) => {
+            const done = () => {
+                video.removeEventListener('loadeddata', done);
+                resolve();
+            };
+            video.addEventListener('loadeddata', done);
+            window.setTimeout(done, 3000);
+        });
+    }
+
+    function disableVirtualBackground() {
+        virtualBackground.running = false;
+        virtualBackground.enabled = false;
+        virtualBackground.sending = false;
+        virtualBackground.lastResultAt = 0;
+        if (virtualBackground.watchdog) {
+            window.clearTimeout(virtualBackground.watchdog);
+            virtualBackground.watchdog = null;
+        }
+        virtualBackground.outputTrack?.stop();
+        virtualBackground.outputTrack = null;
+
+        if (virtualBackground.sourceVideo) {
+            virtualBackground.sourceVideo.pause();
+            virtualBackground.sourceVideo.srcObject = null;
+            virtualBackground.sourceVideo.remove();
+            virtualBackground.sourceVideo = null;
+        }
+
+        const rawTrack = virtualBackground.rawTrack;
+        virtualBackground.rawTrack = null;
+        virtualBackground.canvas = null;
+        virtualBackground.ctx = null;
+
+        if (rawTrack && rawTrack.readyState === 'live') {
+            rawTrack.enabled = videoEnabled;
+            swapLocalVideoTrack(rawTrack);
+        }
+    }
+
+    async function toggleVirtualBackground() {
+        if (virtualBackground.busy) {
+            return;
+        }
+
+        virtualBackground.busy = true;
+        try {
+            if (virtualBackground.enabled) {
+                disableVirtualBackground();
+            } else {
+                await enableVirtualBackground();
+            }
+        } catch (error) {
+            disableVirtualBackground();
+            alert(error.message || 'Unable to change the background.');
+        } finally {
+            virtualBackground.busy = false;
+            refreshBackgroundToggleUi();
+        }
     }
 
     function getStreamForParticipant(participant) {
@@ -1592,10 +1836,16 @@ async function loadMeetingPage(user) {
             chatUnreadBadge.textContent = String(roomState.unreadChatCount);
         }
         const handsRaisedBadge = document.getElementById('hands-raised-badge');
+        const raisedCount = currentRoomParticipants.filter((participant) => participant.handRaised).length;
         if (handsRaisedBadge) {
-            const raisedCount = currentRoomParticipants.filter(p => p.handRaised).length;
             handsRaisedBadge.textContent = String(raisedCount);
             handsRaisedBadge.style.display = raisedCount > 0 ? '' : 'none';
+        }
+        if (handsChip) {
+            handsChip.classList.toggle('is-hidden', !isLocalHost || raisedCount === 0);
+        }
+        if (handsChipCount) {
+            handsChipCount.textContent = String(raisedCount);
         }
     }
 
@@ -1777,6 +2027,11 @@ async function loadMeetingPage(user) {
     }
 
     async function switchVideoDevice(deviceId) {
+        const wasVirtualBackgroundOn = virtualBackground.enabled;
+        if (wasVirtualBackgroundOn) {
+            disableVirtualBackground();
+        }
+
         const videoConstraints = deviceId ? { deviceId: { exact: deviceId } } : true;
         const videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: videoConstraints });
         const newVideoTrack = videoStream.getVideoTracks()[0];
@@ -1785,6 +2040,11 @@ async function loadMeetingPage(user) {
         localStream?.getVideoTracks().forEach((track) => track.stop());
         localVideoDeviceId = deviceId || '';
         replaceLocalStream(new MediaStream([...preservedAudioTracks, newVideoTrack]));
+
+        if (wasVirtualBackgroundOn) {
+            await enableVirtualBackground();
+            refreshBackgroundToggleUi();
+        }
     }
 
     async function setSpeakerOutputDevice(deviceId) {
@@ -1983,14 +2243,14 @@ async function loadMeetingPage(user) {
         if (leftStack) {
             leftStack.innerHTML = '';
             leftParticipants.forEach((participant) => {
-                leftStack.appendChild(createParticipantCard(participant, 'left', getStreamForParticipant(participant), getPeerKey(participant) === getPeerKey(activeSpeaker)));
+                leftStack.appendChild(createParticipantCard(participant, 'left', getStreamForParticipant(participant), getPeerKey(participant) === getPeerKey(activeSpeaker), isSelfParticipant(participant)));
             });
         }
 
         if (rightStack) {
             rightStack.innerHTML = '';
             rightParticipants.forEach((participant) => {
-                rightStack.appendChild(createParticipantCard(participant, 'right', getStreamForParticipant(participant), getPeerKey(participant) === getPeerKey(activeSpeaker)));
+                rightStack.appendChild(createParticipantCard(participant, 'right', getStreamForParticipant(participant), getPeerKey(participant) === getPeerKey(activeSpeaker), isSelfParticipant(participant)));
             });
         }
 
@@ -2007,8 +2267,13 @@ async function loadMeetingPage(user) {
             activeStream !== screenShareStream
         );
 
+        if (stageBgToggle) {
+            stageBgToggle.classList.toggle('is-hidden', !isSelfParticipant(activeSpeaker) || activeStream === screenShareStream);
+        }
+
         renderParticipantsDrawer();
         updateDrawerBadges();
+        refreshBackgroundToggleUi();
     }
 
     function renderMeetingState() {
@@ -2131,6 +2396,9 @@ async function loadMeetingPage(user) {
             localStream.getVideoTracks().forEach((track) => {
                 track.enabled = videoEnabled;
             });
+        }
+        if (virtualBackground.rawTrack) {
+            virtualBackground.rawTrack.enabled = videoEnabled;
         }
 
         if (cameraToggleButton) {
@@ -2507,23 +2775,16 @@ async function loadMeetingPage(user) {
     if (captionsTranslationLanguageSelect) {
         captionsTranslationLanguageSelect.addEventListener('change', () => translateTranscript(transcriptText));
     }
-    if (blurBackgroundButton) {
-        blurBackgroundButton.addEventListener('click', () => {
-            isBlurEnabled = !isBlurEnabled;
-            blurBackgroundButton.classList.toggle('is-active', isBlurEnabled);
+    document.addEventListener('click', (event) => {
+        if (event.target.closest('[data-action="toggle-bg"]')) {
+            toggleVirtualBackground();
+        }
+    });
 
-            // To simulate exactly "background blur toggle" without crashing legacy systems:
-            if (speakerVideo && localStream) {
-                if (isBlurEnabled) {
-                    // Just applying CSS blur to represent it for now
-                    // since real canvas WebGL is too heavy and requires BodyPix/Mediapipe setup.
-                    speakerVideo.style.filter = 'blur(10px)';
-                } else {
-                    speakerVideo.style.filter = '';
-                }
-            }
-        });
+    if (handsChip) {
+        handsChip.addEventListener('click', () => setDrawerState('participants', true));
     }
+
     if (chatAttachFileButton) {
         chatAttachFileButton.addEventListener('click', () => {
             fileShareInput?.click();

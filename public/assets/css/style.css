@@ -259,7 +259,6 @@ main {
     cursor: pointer;
     font-weight: 700;
     font-size: 15px;
-    margin-bottom: 20px;
     transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.25s ease;
     box-shadow: 0 18px 30px rgba(91, 108, 255, 0.22);
 }
@@ -1317,6 +1316,43 @@ footer {
     gap: 12px;
 }
 
+.join-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-bottom: 22px;
+    padding: 20px 24px;
+    border-radius: 24px;
+    border: 1px solid var(--border);
+    background: linear-gradient(135deg, rgba(91, 108, 255, 0.18), rgba(58, 246, 255, 0.08)), var(--surface);
+}
+
+.join-hero__copy h2 {
+    margin: 0;
+    font-size: 20px;
+    color: var(--text);
+}
+
+.join-hero__copy p {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.join-hero .join-card {
+    grid-template-columns: minmax(240px, 360px) auto;
+    align-items: center;
+}
+
+@media (max-width: 720px) {
+    .join-hero .join-card {
+        grid-template-columns: 1fr;
+        width: 100%;
+    }
+}
+
 .join-card input {
     width: 100%;
     padding: 14px 16px;
@@ -1586,15 +1622,17 @@ footer {
 
 .meeting-room-page {
     min-height: 100vh;
-    padding: 24px;
+    /* padding: 0 24px 24px; */
     background: radial-gradient(circle at top, rgba(91, 108, 255, 0.16), transparent 34%),
         linear-gradient(180deg, var(--bg), var(--surface-soft));
     overflow-x: hidden;
 }
 
 .meeting-room-header {
-    max-width: 1240px;
-    margin: 0 auto 24px;
+    max-width: none;
+    width: 100%;
+    margin: 0 0 24px;
+    padding-top: 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1604,7 +1642,7 @@ footer {
 .meeting-branding {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 34px;
 }
 
 .meeting-brand-logo {
@@ -1756,9 +1794,147 @@ footer {
     font-size: 13px;
 }
 
+.raised-hand-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    font-size: 17px;
+    line-height: 1;
+    background: rgba(250, 204, 21, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 24px rgba(250, 204, 21, 0.35);
+    animation: hand-wave 1.6s ease-in-out infinite;
+}
+
+.speaker-stage__frame .raised-hand-badge {
+    top: 16px;
+    right: 16px;
+    width: 44px;
+    height: 44px;
+    font-size: 22px;
+}
+
+.participant-card.is-hand-raised {
+    outline: 2px solid rgba(250, 204, 21, 0.75);
+    outline-offset: -2px;
+}
+
+@keyframes hand-wave {
+    0%, 100% { transform: rotate(-8deg); }
+    50% { transform: rotate(10deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .raised-hand-badge {
+        animation: none;
+    }
+}
+
+.bg-effect-toggle {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 3;
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 15px;
+    cursor: pointer;
+    color: #fff;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(12px);
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.bg-effect-toggle:hover {
+    transform: scale(1.06);
+}
+
+.bg-effect-toggle.is-active,
+.mini-action-button.is-active {
+    background: rgba(58, 246, 255, 0.9);
+    border-color: rgba(58, 246, 255, 0.9);
+    color: #06202b;
+}
+
+.meeting-hands-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: #fff;
+    background: linear-gradient(135deg, #ec4899, #d946ef);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    box-shadow: 0 10px 26px rgba(217, 70, 239, 0.32);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.meeting-hands-chip.is-hidden {
+    display: none;
+}
+
+/* Kept in the layout (not display:none) so the browser keeps decoding frames for segmentation. */
+.vb-source-video {
+    position: fixed;
+    left: -10000px;
+    top: 0;
+    width: 2px;
+    height: 2px;
+    opacity: 0.01;
+    pointer-events: none;
+}
+
 .speaker-stage {
     display: flex;
     justify-content: center;
+    align-items: center;
+    min-height: 0;
+}
+
+/* Fullscreen target is .meeting-room-shell, so size the stage from the available height
+   and reserve room for the fixed control dock instead of letting the frame overflow. */
+.meeting-room-shell:fullscreen {
+    --dock-space: 172px;
+    --shell-pad-top: 16px;
+    height: 100vh;
+    min-height: 100vh;
+    max-height: 100vh;
+    grid-template-rows: minmax(0, 1fr);
+    padding: var(--shell-pad-top) 16px var(--dock-space);
+    overflow: hidden;
+    background: radial-gradient(circle at top, rgba(91, 108, 255, 0.16), transparent 34%),
+        linear-gradient(180deg, var(--bg), var(--surface-soft));
+}
+
+.meeting-room-shell:fullscreen .participant-stack {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.meeting-room-shell:fullscreen .speaker-stage__frame {
+    width: auto;
+    height: calc(100vh - var(--dock-space) - var(--shell-pad-top));
+    max-width: 100%;
+}
+
+@media (max-width: 900px) {
+    .meeting-room-shell:fullscreen {
+        --dock-space: 232px;
+    }
 }
 
 .speaker-stage__frame {
@@ -2398,7 +2574,7 @@ footer {
 
 @media (max-width: 900px) {
     .meeting-room-page {
-        padding: 16px;
+        padding: 0 16px 16px;
     }
 
     .meeting-room-header {
@@ -2530,7 +2706,7 @@ footer {
 
 @media (max-width: 540px) {
     .meeting-room-page {
-        padding: 12px;
+        padding: 0 12px 12px;
     }
 
     .meeting-room-header {
