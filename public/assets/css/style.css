@@ -3356,29 +3356,9 @@ textarea.is-invalid {
     font-weight: 600;
 }
 
-/* Meeting toast */
-.meeting-toast {
-    position: fixed;
-    left: 50%;
-    bottom: 110px;
-    z-index: 1200;
-    transform: translate(-50%, 16px);
-    max-width: min(420px, 88vw);
-    padding: 11px 18px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 13.5px;
-    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.22);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.meeting-toast.is-visible {
-    opacity: 1;
-    transform: translate(-50%, 0);
+/* Keep meeting-room toasts clear of the control bar */
+.meeting-room-page .toast-stack {
+    bottom: 118px;
 }
 
 .captions-detected {
@@ -3817,6 +3797,306 @@ textarea.is-invalid {
     flex: none;
     white-space: nowrap;
     text-decoration: none;
+}
+
+/* Toasts */
+.toast-stack {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 2000;
+    display: grid;
+    gap: 10px;
+    width: min(360px, calc(100vw - 40px));
+    pointer-events: none;
+}
+
+.toast {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 13px 14px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.26);
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: auto;
+}
+
+.toast.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast--success {
+    border-color: var(--success);
+}
+
+.toast--error {
+    border-color: var(--danger);
+}
+
+.toast__icon {
+    flex: none;
+    font-size: 15px;
+    line-height: 1.4;
+}
+
+.toast__message {
+    flex: 1;
+    margin: 0;
+    color: var(--text);
+    font-size: 13.5px;
+    line-height: 1.45;
+}
+
+.toast__close {
+    flex: none;
+    padding: 0 2px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.toast__close:hover {
+    color: var(--text);
+}
+
+@media (max-width: 620px) {
+    .toast-stack {
+        right: 12px;
+        left: 12px;
+        bottom: 12px;
+        width: auto;
+    }
+}
+
+/* Confirm dialog */
+.confirm-modal {
+    z-index: 1800;
+}
+
+.confirm-modal__card {
+    width: min(100%, 400px);
+    display: grid;
+    gap: 10px;
+}
+
+.confirm-modal__title {
+    margin: 0;
+    color: var(--text);
+    font-size: 18px;
+}
+
+.confirm-modal__message {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+
+.confirm-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.primary-button--danger {
+    background: linear-gradient(135deg, var(--danger), #f97316);
+    box-shadow: 0 14px 26px rgba(239, 68, 68, 0.26);
+}
+
+/* Notifications */
+.notification-wrap {
+    position: relative;
+}
+
+.notification-button {
+    position: relative;
+    overflow: visible;
+}
+
+.notification-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+}
+
+.notification-panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    z-index: 70;
+    width: min(340px, calc(100vw - 40px));
+    max-height: 420px;
+    overflow-y: auto;
+    padding: 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: 0 22px 48px rgba(15, 23, 42, 0.28);
+}
+
+.notification-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+    color: var(--text);
+    font-size: 14px;
+}
+
+.link-inline-button {
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.notification-list {
+    display: grid;
+    gap: 8px;
+}
+
+.notification-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface-soft);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.16s ease;
+}
+
+.notification-item:hover {
+    border-color: var(--accent);
+}
+
+.notification-item.is-unread {
+    border-color: var(--accent);
+    background: rgba(91, 108, 255, 0.1);
+}
+
+.notification-item__icon {
+    flex: none;
+    font-size: 15px;
+}
+
+.notification-item__copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.notification-item__copy strong {
+    display: block;
+    color: var(--text);
+    font-size: 13.5px;
+}
+
+.notification-item__copy small {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* Today schedule */
+.today-section {
+    margin-bottom: 24px;
+}
+
+.today-list {
+    display: grid;
+    gap: 10px;
+}
+
+.today-card {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.today-card.is-live {
+    border-color: var(--success);
+}
+
+.today-card__time {
+    display: grid;
+    gap: 2px;
+}
+
+.today-card__time strong {
+    color: var(--text);
+    font-size: 16px;
+}
+
+.today-card__time span {
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+.today-card__body {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.today-card__body strong {
+    color: var(--text);
+    font-size: 15px;
+}
+
+.today-card__body span {
+    color: var(--muted);
+    font-size: 12.5px;
+}
+
+.today-card__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+@media (max-width: 720px) {
+    .today-card {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .today-card__actions {
+        justify-content: space-between;
+    }
 }
 
 @media (max-width: 640px) {

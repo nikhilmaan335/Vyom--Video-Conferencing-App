@@ -51,8 +51,21 @@
                         <input type="search" id="meeting-search" placeholder="Search meetings">
                         <button id="meeting-search-button" class="icon-button" type="button" aria-label="Search meetings">🔍</button>
                     </div>
+                    <div class="notification-wrap">
+                        <button id="notifications-button" class="icon-button notification-button" type="button" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
+                            <span aria-hidden="true">🔔</span>
+                            <span class="notification-badge is-hidden" id="notification-badge">0</span>
+                        </button>
+                        <div class="notification-panel is-hidden" id="notification-panel" role="dialog" aria-label="Notifications">
+                            <div class="notification-panel__header">
+                                <strong>Notifications</strong>
+                                <button class="link-inline-button" id="notifications-mark-read" type="button">Mark all read</button>
+                            </div>
+                            <div class="notification-list" id="notification-list"></div>
+                        </div>
+                    </div>
                     <button id="theme-toggle" class="icon-button" type="button" aria-label="Toggle dark mode">🌙</button>
-                    <button id="new-meeting-button" class="primary-button" type="button">New Meeting</button>
+                    <button id="new-meeting-button" class="primary-button auto-button" type="button">New Meeting</button>
                 </div>
             </header>
 
@@ -80,6 +93,17 @@
                     <span>History</span>
                     <strong id="dashboard-history-count">0</strong>
                 </article>
+            </section>
+
+            <section class="today-section" id="today-section">
+                <div class="section-header">
+                    <div>
+                        <h2>Today</h2>
+                        <p>Everything on your schedule for the rest of the day.</p>
+                    </div>
+                    <span class="pill-count" id="today-count">0</span>
+                </div>
+                <div class="today-list" id="today-list"></div>
             </section>
 
             <section class="upcoming-section">

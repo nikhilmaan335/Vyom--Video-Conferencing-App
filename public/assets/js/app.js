@@ -156,24 +156,136 @@ function formatSecondsDuration(totalSeconds) {
     return minutes ? `${minutes}m ${remainder}s` : `${remainder}s`;
 }
 
-let meetingToastTimer = null;
+const TOAST_ICONS = {
+    info: 'ℹ️',
+    success: '✅',
+    error: '⚠️'
+};
 
-function showMeetingToast(message) {
-    let toast = document.getElementById('meeting-toast');
-    if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'meeting-toast';
-        toast.className = 'meeting-toast';
-        toast.setAttribute('role', 'status');
-        document.body.appendChild(toast);
+function getToastStack() {
+    let stack = document.getElementById('vyom-toast-stack');
+    if (!stack) {
+        stack = document.createElement('div');
+        stack.id = 'vyom-toast-stack';
+        stack.className = 'toast-stack';
+        stack.setAttribute('role', 'status');
+        stack.setAttribute('aria-live', 'polite');
+        document.body.appendChild(stack);
     }
 
-    toast.textContent = message;
-    toast.classList.add('is-visible');
-    clearTimeout(meetingToastTimer);
-    meetingToastTimer = setTimeout(() => {
+    return stack;
+}
+
+function showToast(message, { tone = 'info', duration = 4200 } = {}) {
+    const text = String(message || '').trim();
+    if (!text) {
+        return;
+    }
+
+    const stack = getToastStack();
+    const toast = document.createElement('div');
+    toast.className = `toast toast--${tone}`;
+
+    const icon = document.createElement('span');
+    icon.className = 'toast__icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = TOAST_ICONS[tone] || TOAST_ICONS.info;
+
+    const body = document.createElement('p');
+    body.className = 'toast__message';
+    body.textContent = text;
+
+    const dismiss = document.createElement('button');
+    dismiss.className = 'toast__close';
+    dismiss.type = 'button';
+    dismiss.setAttribute('aria-label', 'Dismiss notification');
+    dismiss.textContent = '✕';
+
+    const remove = () => {
         toast.classList.remove('is-visible');
-    }, 4000);
+        setTimeout(() => toast.remove(), 220);
+    };
+
+    dismiss.addEventListener('click', remove);
+    toast.append(icon, body, dismiss);
+    stack.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('is-visible'));
+    setTimeout(remove, duration);
+
+    while (stack.children.length > 4) {
+        stack.firstElementChild.remove();
+    }
+}
+
+// Promise-based replacement for window.confirm so flows never block on a native dialog.
+function confirmDialog({
+    title = 'Are you sure?',
+    message = '',
+    confirmLabel = 'Confirm',
+    cancelLabel = 'Cancel',
+    tone = 'default'
+} = {}) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'social-auth-modal confirm-modal';
+
+        const card = document.createElement('div');
+        card.className = 'social-auth-modal__card confirm-modal__card';
+        card.setAttribute('role', 'alertdialog');
+        card.setAttribute('aria-modal', 'true');
+
+        const heading = document.createElement('h2');
+        heading.className = 'confirm-modal__title';
+        heading.textContent = title;
+        card.appendChild(heading);
+
+        if (message) {
+            const body = document.createElement('p');
+            body.className = 'confirm-modal__message';
+            body.textContent = message;
+            card.appendChild(body);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'confirm-modal__actions';
+
+        const cancelButton = document.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.className = 'secondary-button auto-button';
+        cancelButton.textContent = cancelLabel;
+
+        const confirmButton = document.createElement('button');
+        confirmButton.type = 'button';
+        confirmButton.className = `primary-button auto-button${tone === 'danger' ? ' primary-button--danger' : ''}`;
+        confirmButton.textContent = confirmLabel;
+
+        actions.append(cancelButton, confirmButton);
+        card.appendChild(actions);
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        const close = (result) => {
+            document.removeEventListener('keydown', onKeyDown);
+            overlay.remove();
+            resolve(result);
+        };
+
+        function onKeyDown(event) {
+            if (event.key === 'Escape') {
+                close(false);
+            }
+        }
+
+        cancelButton.addEventListener('click', () => close(false));
+        confirmButton.addEventListener('click', () => close(true));
+        overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) {
+                close(false);
+            }
+        });
+        document.addEventListener('keydown', onKeyDown);
+        requestAnimationFrame(() => confirmButton.focus());
+    });
 }
 
 let preferredSpeakerOutputDeviceId = '';
@@ -877,15 +989,22 @@ function renderRecordingRows(rows, bodyElement, onDelete) {
 
     bodyElement.querySelectorAll('[data-recording-delete]').forEach((button) => {
         button.addEventListener('click', async () => {
-            if (!window.confirm('Delete this recording permanently?')) {
+            const confirmed = await confirmDialog({
+                title: 'Delete this recording?',
+                message: 'The video file is removed from the server and cannot be restored.',
+                confirmLabel: 'Delete',
+                tone: 'danger'
+            });
+            if (!confirmed) {
                 return;
             }
 
             try {
                 await requestJson(`/api/recordings/${encodeURIComponent(button.dataset.recordingDelete)}`, { method: 'DELETE' });
+                showToast('Recording deleted.', { tone: 'success' });
                 await onDelete?.();
             } catch (error) {
-                alert(error.message || 'Unable to delete the recording.');
+                showToast(error.message || 'Unable to delete the recording.', { tone: 'error' });
             }
         });
     });
@@ -1040,7 +1159,7 @@ async function loadMeetingPage(user) {
     window.history.pushState({ inMeeting: true }, '', window.location.href);
     const handleMeetingBackNavigation = () => {
         if (activeRoomCode) {
-            alert('You are still in the meeting. Please use the "End" or "Leave" button to exit.');
+            showToast('You are still in the meeting. Use the End button to leave.', { tone: 'info' });
             window.history.pushState({ inMeeting: true }, '', window.location.href);
         }
     };
@@ -1397,7 +1516,7 @@ async function loadMeetingPage(user) {
             if (virtualBackground.enabled && !virtualBackground.lastResultAt) {
                 disableVirtualBackground();
                 refreshBackgroundToggleUi();
-                alert('Background effects could not start on this device, so your normal camera is back on.');
+                showToast('Background effects could not start on this device, so your normal camera is back on.', { tone: 'error' });
             }
         }, 8000);
     }
@@ -1461,7 +1580,7 @@ async function loadMeetingPage(user) {
             }
         } catch (error) {
             disableVirtualBackground();
-            alert(error.message || 'Unable to change the background.');
+            showToast(error.message || 'Unable to change the background.', { tone: 'error' });
         } finally {
             virtualBackground.busy = false;
             refreshBackgroundToggleUi();
@@ -1874,7 +1993,7 @@ async function loadMeetingPage(user) {
 
         const maxSize = 2 * 1024 * 1024;
         if (file.size > maxSize) {
-            alert('Please share files under 2 MB so everyone in the meeting can open them quickly.');
+            showToast('Please share files under 2 MB so everyone in the meeting can open them quickly.', { tone: 'error' });
             return;
         }
 
@@ -1905,7 +2024,7 @@ async function loadMeetingPage(user) {
         }
 
         if (!navigator.mediaDevices?.getDisplayMedia) {
-            alert('Screen sharing is not supported in this browser.');
+            showToast('Screen sharing is not supported in this browser.', { tone: 'error' });
             return;
         }
 
@@ -2302,9 +2421,9 @@ async function loadMeetingPage(user) {
                 throw new Error(data.message || 'Unable to save the recording.');
             }
 
-            alert('Recording saved. You can download it from your dashboard under Recordings.');
+            showToast('Recording saved. Download it from your dashboard under Recordings.', { tone: 'success', duration: 6000 });
         } catch (error) {
-            alert(error.message || 'Unable to save the recording.');
+            showToast(error.message || 'Unable to save the recording.', { tone: 'error' });
         } finally {
             recordingState.uploading = false;
             updateRecordingUi();
@@ -2326,12 +2445,12 @@ async function loadMeetingPage(user) {
         }
 
         if (!window.MediaRecorder || !navigator.mediaDevices?.getDisplayMedia) {
-            alert('Recording is not supported in this browser.');
+            showToast('Recording is not supported in this browser.', { tone: 'error' });
             return;
         }
 
         if (!isLocalHost && !meetingSettings.allowParticipantRecording) {
-            alert('The host has disabled recording for participants.');
+            showToast('The host has disabled recording for participants.', { tone: 'error' });
             return;
         }
 
@@ -2534,11 +2653,19 @@ async function loadMeetingPage(user) {
         }).join('');
 
         participantsDrawerList.querySelectorAll('[data-host-action]').forEach((button) => {
-            button.addEventListener('click', () => {
+            button.addEventListener('click', async () => {
                 const action = button.dataset.hostAction;
                 const targetSocketId = button.dataset.targetSocket;
-                if (action === 'remove' && !window.confirm('Remove this participant from the meeting?')) {
-                    return;
+                if (action === 'remove') {
+                    const confirmed = await confirmDialog({
+                        title: 'Remove this participant?',
+                        message: 'They will be returned to their dashboard and can rejoin with the meeting link.',
+                        confirmLabel: 'Remove',
+                        tone: 'danger'
+                    });
+                    if (!confirmed) {
+                        return;
+                    }
                 }
                 sendHostCommand(action, targetSocketId);
             });
@@ -2707,7 +2834,7 @@ async function loadMeetingPage(user) {
                 const container = chatMessageList.querySelector(`.poll-options[data-poll-id="${messageId}"]`);
                 const selections = Array.from(container?.querySelectorAll('input:checked') || []).map((input) => Number(input.value));
                 if (!selections.length) {
-                    showMeetingToast('Choose at least one option before voting.');
+                    showToast('Choose at least one option before voting.');
                     return;
                 }
 
@@ -3330,7 +3457,7 @@ async function loadMeetingPage(user) {
             applyAudioToggle(Boolean(state.entryState.audioEnabled), false);
             applyVideoToggle(Boolean(state.entryState.videoEnabled) && Boolean(localStream), false);
             if (!state.entryState.audioEnabled || !state.entryState.videoEnabled) {
-                showMeetingToast('You joined with the host\'s entry settings applied.');
+                showToast('You joined with the host\'s entry settings applied.');
             }
         }
         if (state?.whiteboard?.strokes) {
@@ -3348,12 +3475,12 @@ async function loadMeetingPage(user) {
         const host = hostName || 'The host';
         if (action === 'mute') {
             applyAudioToggle(false);
-            showMeetingToast(`${host} muted you.`);
+            showToast(`${host} muted you.`);
             return;
         }
         if (action === 'video-off') {
             applyVideoToggle(false);
-            showMeetingToast(`${host} turned off your video.`);
+            showToast(`${host} turned off your video.`);
             return;
         }
         if (action === 'lower-hand') {
@@ -3361,9 +3488,9 @@ async function loadMeetingPage(user) {
             return;
         }
         if (action === 'remove') {
-            alert(`${host} removed you from this meeting.`);
+            showToast(`${host} removed you from this meeting.`, { tone: 'error', duration: 5000 });
             socket.emit('meeting:leave', { roomCode: activeRoomCode });
-            navigateToDashboardWithoutMeetingHistory();
+            setTimeout(navigateToDashboardWithoutMeetingHistory, 1600);
         }
     });
 
@@ -3465,18 +3592,18 @@ async function loadMeetingPage(user) {
 
     socket.on('meeting:error', (message) => {
         if (/ended/i.test(String(message || ''))) {
-            alert(message);
-            navigateToDashboardWithoutMeetingHistory();
+            showToast(message, { tone: 'error', duration: 5000 });
+            setTimeout(navigateToDashboardWithoutMeetingHistory, 1600);
             return;
         }
 
-        showMeetingToast(message);
+        showToast(message, { tone: 'error' });
         renderChatDrawer();
     });
 
     socket.on('meeting:ended', ({ message }) => {
-        alert(message || 'The host ended this meeting.');
-        navigateToDashboardWithoutMeetingHistory();
+        showToast(message || 'The host ended this meeting.', { tone: 'info', duration: 5000 });
+        setTimeout(navigateToDashboardWithoutMeetingHistory, 1600);
     });
 
     updateTimer();
@@ -3562,7 +3689,7 @@ async function loadMeetingPage(user) {
                 await startMeetingRecording();
             } catch (error) {
                 if (error.name !== 'NotAllowedError') {
-                    alert(error.message || 'Unable to start recording.');
+                    showToast(error.message || 'Unable to start recording.', { tone: 'error' });
                 }
             }
         });
@@ -3581,7 +3708,7 @@ async function loadMeetingPage(user) {
     }
     if (meetingFullscreenButton) {
         meetingFullscreenButton.addEventListener('click', () => {
-            toggleFullscreen().catch((error) => alert(error.message || 'Unable to toggle fullscreen.'));
+            toggleFullscreen().catch((error) => showToast(error.message || 'Unable to toggle fullscreen.', { tone: 'error' }));
         });
         updateFullscreenButton();
         document.addEventListener('fullscreenchange', updateFullscreenButton);
@@ -3589,7 +3716,7 @@ async function loadMeetingPage(user) {
     if (meetingExitFullscreenButton) {
         meetingExitFullscreenButton.addEventListener('click', () => {
             if (document.fullscreenElement) {
-                toggleFullscreen().catch((error) => alert(error.message || 'Unable to exit fullscreen.'));
+                toggleFullscreen().catch((error) => showToast(error.message || 'Unable to exit fullscreen.', { tone: 'error' }));
             }
         });
     }
@@ -3648,7 +3775,7 @@ async function loadMeetingPage(user) {
 
     function openPollModal() {
         if (!isLocalHost && !meetingSettings.allowParticipantChat) {
-            showMeetingToast('The host has disabled chat and polls for participants.');
+            showToast('The host has disabled chat and polls for participants.');
             return;
         }
 
@@ -3733,7 +3860,7 @@ async function loadMeetingPage(user) {
 
             closePollModal();
             setDrawerState('chat', true);
-            showMeetingToast('Poll launched in chat.');
+            showToast('Poll launched in chat.');
         });
     }
     if (downloadAttendanceButton) {
@@ -3797,7 +3924,7 @@ async function loadMeetingPage(user) {
                     };
                     recognition.start();
                 } else {
-                    alert('Speech Recognition API is not supported in this browser.');
+                    showToast('Live captions are not supported in this browser.', { tone: 'error' });
                     setDrawerState('captions', false);
                 }
             }
@@ -3889,7 +4016,7 @@ async function loadMeetingPage(user) {
         chatComposer.addEventListener('submit', (event) => {
             event.preventDefault();
             if (!isLocalHost && !meetingSettings.allowParticipantChat) {
-                showMeetingToast('The host has disabled chat for participants.');
+                showToast('The host has disabled chat for participants.');
                 return;
             }
             const message = chatMessageInput?.value.trim();
@@ -3908,7 +4035,7 @@ async function loadMeetingPage(user) {
             try {
                 await switchAudioDevice(microphoneSelect.value);
             } catch (error) {
-                alert(error.message || 'Unable to switch microphone.');
+                showToast(error.message || 'Unable to switch microphone.', { tone: 'error' });
             }
         });
     }
@@ -3918,7 +4045,7 @@ async function loadMeetingPage(user) {
             try {
                 await switchVideoDevice(cameraSelect.value);
             } catch (error) {
-                alert(error.message || 'Unable to switch camera.');
+                showToast(error.message || 'Unable to switch camera.', { tone: 'error' });
             }
         });
     }
@@ -3928,7 +4055,7 @@ async function loadMeetingPage(user) {
             try {
                 await setSpeakerOutputDevice(speakerOutputSelect.value);
             } catch (error) {
-                alert(error.message || 'Unable to switch speaker output.');
+                showToast(error.message || 'Unable to switch speaker output.', { tone: 'error' });
             }
         });
     }
@@ -3956,7 +4083,7 @@ async function loadMeetingPage(user) {
                 return;
             }
             if (!isLocalHost && !meetingSettings.allowParticipantScreenShare) {
-                showMeetingToast('The host has disabled screen sharing for participants.');
+                showToast('The host has disabled screen sharing for participants.');
                 return;
             }
             await startScreenShare('screen');
@@ -3973,7 +4100,7 @@ async function loadMeetingPage(user) {
         leaveMeetingButton.addEventListener('click', async () => {
             if (recordingState.recorder) {
                 stopMeetingRecording();
-                showMeetingToast('Saving your recording before you leave...');
+                showToast('Saving your recording before you leave...');
                 await new Promise((resolve) => setTimeout(resolve, 1200));
             }
 
@@ -3988,7 +4115,7 @@ async function loadMeetingPage(user) {
                 try {
                     await requestJson(`/api/meetings/${encodeURIComponent(activeRoomCode)}/end`, { method: 'POST' });
                 } catch (error) {
-                    alert(error.message || 'Unable to end meeting.');
+                    showToast(error.message || 'Unable to end meeting.', { tone: 'error' });
                 }
             }
 
@@ -4093,6 +4220,14 @@ async function loadDashboardPage(user) {
     const meetingModalAutoJoin = document.getElementById('meeting-modal-auto-join');
     const meetingModalClose = document.getElementById('meeting-modal-close');
     const meetingModalCancel = document.getElementById('meeting-modal-cancel');
+    const todaySection = document.getElementById('today-section');
+    const todayList = document.getElementById('today-list');
+    const todayCount = document.getElementById('today-count');
+    const notificationsButton = document.getElementById('notifications-button');
+    const notificationPanel = document.getElementById('notification-panel');
+    const notificationList = document.getElementById('notification-list');
+    const notificationBadge = document.getElementById('notification-badge');
+    const notificationsMarkRead = document.getElementById('notifications-mark-read');
     let profileAvatarDataUrl = dashboardData.profile.avatarUrl || '';
 
     function ensureWorkspacePanel() {
@@ -4193,6 +4328,8 @@ async function loadDashboardPage(user) {
             allMeetings = [];
         }
 
+        renderTodaySchedule();
+        renderNotifications();
         if (currentWorkspaceView === 'calendar') {
             renderCalendarWorkspace();
         }
@@ -4207,6 +4344,7 @@ async function loadDashboardPage(user) {
         }
 
         renderRecordingRows(recordings, document.getElementById('recordings-body'), refreshRecordings);
+        renderNotifications();
         if (currentWorkspaceView === 'recordings') {
             renderRecordingsWorkspace();
         }
@@ -4216,6 +4354,218 @@ async function loadDashboardPage(user) {
         const normalizedRoomCode = normalizeRoomCodeInput(roomCode);
         await requestJson(`/api/meetings/${encodeURIComponent(normalizedRoomCode)}/join`, { method: 'POST' });
         redirectToMeeting(normalizedRoomCode);
+    }
+
+    function getTodaysMeetings() {
+        const todayKey = toDateKey(new Date());
+        return allMeetings
+            .filter((meeting) => getMeetingDateKey(meeting) === todayKey && meeting.status !== 'ended')
+            .sort((left, right) => new Date(left.scheduledAt || left.createdAt) - new Date(right.scheduledAt || right.createdAt));
+    }
+
+    function describeRelativeStart(meeting) {
+        if (meeting.status === 'active') {
+            return 'Live now';
+        }
+
+        const start = new Date(meeting.scheduledAt || meeting.createdAt).getTime();
+        const diffMinutes = Math.round((start - Date.now()) / 60000);
+        if (Number.isNaN(diffMinutes)) {
+            return '';
+        }
+        if (diffMinutes <= 0) {
+            return 'Starting now';
+        }
+        if (diffMinutes < 60) {
+            return `In ${diffMinutes} min`;
+        }
+
+        const hours = Math.floor(diffMinutes / 60);
+        return `In ${hours} hr${hours === 1 ? '' : 's'}`;
+    }
+
+    function renderTodaySchedule() {
+        if (!todayList) {
+            return;
+        }
+
+        const meetings = getTodaysMeetings();
+        if (todayCount) {
+            todayCount.textContent = String(meetings.length);
+        }
+
+        todayList.innerHTML = meetings.length
+            ? meetings.map((meeting) => `
+                <article class="today-card ${meeting.status === 'active' ? 'is-live' : ''}">
+                    <div class="today-card__time">
+                        <strong>${escapeHtml(formatTimeOfDay(meeting.scheduledAt || meeting.createdAt))}</strong>
+                        <span>${escapeHtml(describeRelativeStart(meeting))}</span>
+                    </div>
+                    <div class="today-card__body">
+                        <strong>${escapeHtml(meeting.title)}</strong>
+                        <span>${escapeHtml(meeting.teamName)} • ${escapeHtml(meeting.isHost ? 'You host' : meeting.hostName)}</span>
+                    </div>
+                    <div class="today-card__actions">
+                        <span class="status-chip status-chip--${escapeHtml(meeting.status)}">${escapeHtml(meeting.status)}</span>
+                        <button class="primary-button small-button auto-button" type="button" data-room-code="${escapeHtml(meeting.roomCode)}">Join</button>
+                    </div>
+                </article>
+            `).join('')
+            : '<div class="empty-state-card">Nothing scheduled for today. Enjoy the focus time.</div>';
+
+        todayList.querySelectorAll('[data-room-code]').forEach((button) => {
+            button.addEventListener('click', () => joinRoomAndRedirect(button.dataset.roomCode));
+        });
+    }
+
+    function getReadNotificationIds() {
+        try {
+            return new Set(JSON.parse(localStorage.getItem('vyomReadNotifications') || '[]'));
+        } catch (error) {
+            return new Set();
+        }
+    }
+
+    function setReadNotificationIds(ids) {
+        localStorage.setItem('vyomReadNotifications', JSON.stringify([...ids].slice(-200)));
+    }
+
+    function buildNotifications() {
+        const now = Date.now();
+        const todayKey = toDateKey(new Date());
+        const items = [];
+
+        allMeetings.forEach((meeting) => {
+            const start = new Date(meeting.scheduledAt || meeting.createdAt).getTime();
+            if (meeting.status === 'active') {
+                items.push({
+                    id: `live-${meeting.id}`,
+                    icon: '🟢',
+                    title: `${meeting.title} is live`,
+                    body: `${meeting.teamName} • started ${formatTimeOfDay(meeting.startedAt || meeting.scheduledAt)}`,
+                    at: start,
+                    action: { type: 'join', roomCode: meeting.roomCode }
+                });
+                return;
+            }
+
+            if (meeting.status !== 'scheduled' || getMeetingDateKey(meeting) !== todayKey) {
+                return;
+            }
+
+            const minutesAway = Math.round((start - now) / 60000);
+            if (minutesAway < -15 || minutesAway > 120) {
+                return;
+            }
+
+            items.push({
+                id: `soon-${meeting.id}`,
+                icon: '⏰',
+                title: minutesAway <= 0 ? `${meeting.title} is starting` : `${meeting.title} starts in ${minutesAway} min`,
+                body: `${meeting.teamName} • ${formatTimeOfDay(meeting.scheduledAt)}`,
+                at: start,
+                action: { type: 'join', roomCode: meeting.roomCode }
+            });
+        });
+
+        recordings.slice(0, 5).forEach((recording) => {
+            const at = new Date(recording.createdAt.replace(' ', 'T') + 'Z').getTime();
+            if (Number.isNaN(at) || now - at > 7 * 24 * 60 * 60 * 1000) {
+                return;
+            }
+
+            items.push({
+                id: `recording-${recording.id}`,
+                icon: '🎬',
+                title: 'Recording ready',
+                body: `${recording.displayName} • ${formatFileSize(recording.sizeBytes)}`,
+                at,
+                action: { type: 'view', target: 'recordings' }
+            });
+        });
+
+        return items.sort((left, right) => right.at - left.at).slice(0, 20);
+    }
+
+    function renderNotifications() {
+        if (!notificationList) {
+            return;
+        }
+
+        const readIds = getReadNotificationIds();
+        const items = buildNotifications();
+        const unread = items.filter((item) => !readIds.has(item.id));
+
+        if (notificationBadge) {
+            notificationBadge.textContent = String(unread.length);
+            notificationBadge.classList.toggle('is-hidden', unread.length === 0);
+        }
+
+        notificationList.innerHTML = items.length
+            ? items.map((item) => `
+                <button class="notification-item ${readIds.has(item.id) ? '' : 'is-unread'}" type="button"
+                        data-notification-id="${escapeHtml(item.id)}"
+                        data-notification-action="${escapeHtml(item.action.type)}"
+                        data-notification-target="${escapeHtml(item.action.roomCode || item.action.target || '')}">
+                    <span class="notification-item__icon" aria-hidden="true">${item.icon}</span>
+                    <span class="notification-item__copy">
+                        <strong>${escapeHtml(item.title)}</strong>
+                        <small>${escapeHtml(item.body)}</small>
+                    </span>
+                </button>
+            `).join('')
+            : '<div class="empty-state-card">You are all caught up.</div>';
+
+        notificationList.querySelectorAll('[data-notification-id]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const ids = getReadNotificationIds();
+                ids.add(button.dataset.notificationId);
+                setReadNotificationIds(ids);
+                closeNotificationPanel();
+
+                if (button.dataset.notificationAction === 'join') {
+                    joinRoomAndRedirect(button.dataset.notificationTarget);
+                    return;
+                }
+
+                activateNavLink(button.dataset.notificationTarget || 'dashboard');
+                renderNotifications();
+            });
+        });
+
+        maybeSendDesktopNotifications(unread);
+    }
+
+    const sentDesktopNotifications = new Set();
+
+    function maybeSendDesktopNotifications(unread) {
+        if (localStorage.getItem('vyomDesktopNotifications') !== 'true') {
+            return;
+        }
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+            return;
+        }
+
+        unread
+            .filter((item) => item.id.startsWith('soon-') || item.id.startsWith('live-'))
+            .forEach((item) => {
+                if (sentDesktopNotifications.has(item.id)) {
+                    return;
+                }
+                sentDesktopNotifications.add(item.id);
+                new Notification(item.title, { body: item.body, icon: 'assets/images/logo.png' });
+            });
+    }
+
+    function openNotificationPanel() {
+        renderNotifications();
+        notificationPanel?.classList.remove('is-hidden');
+        notificationsButton?.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeNotificationPanel() {
+        notificationPanel?.classList.add('is-hidden');
+        notificationsButton?.setAttribute('aria-expanded', 'false');
     }
 
     function populateTeamOptions(selectElement, selectedId = '') {
@@ -4617,6 +4967,7 @@ async function loadDashboardPage(user) {
 
         const compactEnabled = localStorage.getItem('vyomDashboardCompactView') === 'true';
         const autoJoinEnabled = localStorage.getItem('vyomDashboardAutoJoin') !== 'false';
+        const desktopNotificationsEnabled = localStorage.getItem('vyomDesktopNotifications') === 'true';
         const isDark = document.documentElement.dataset.theme === 'dark';
 
         workspacePanel.innerHTML = `
@@ -4643,6 +4994,13 @@ async function loadDashboardPage(user) {
                         <span class="toggle-row__copy">
                             <strong>Dark theme</strong>
                             <small>Switch between the light and dark appearance.</small>
+                        </span>
+                    </label>
+                    <label class="toggle-row">
+                        <input type="checkbox" id="workspace-desktop-notifications" ${desktopNotificationsEnabled ? 'checked' : ''}>
+                        <span class="toggle-row__copy">
+                            <strong>Desktop notifications</strong>
+                            <small>Get alerted when a meeting is about to start.</small>
                         </span>
                     </label>
                 </div>
@@ -4676,6 +5034,33 @@ async function loadDashboardPage(user) {
             document.getElementById('theme-toggle')?.click();
         });
 
+        document.getElementById('workspace-desktop-notifications')?.addEventListener('change', async (event) => {
+            if (!event.target.checked) {
+                localStorage.setItem('vyomDesktopNotifications', 'false');
+                return;
+            }
+
+            if (typeof Notification === 'undefined') {
+                event.target.checked = false;
+                showToast('This browser does not support desktop notifications.', { tone: 'error' });
+                return;
+            }
+
+            const permission = Notification.permission === 'granted'
+                ? 'granted'
+                : await Notification.requestPermission();
+
+            if (permission !== 'granted') {
+                event.target.checked = false;
+                localStorage.setItem('vyomDesktopNotifications', 'false');
+                showToast('Notification permission was blocked in your browser settings.', { tone: 'error' });
+                return;
+            }
+
+            localStorage.setItem('vyomDesktopNotifications', 'true');
+            showToast('Desktop notifications enabled.', { tone: 'success' });
+        });
+
         document.getElementById('workspace-edit-profile')?.addEventListener('click', openProfileModal);
         document.getElementById('workspace-sign-out')?.addEventListener('click', handleSignOut);
     }
@@ -4689,6 +5074,9 @@ async function loadDashboardPage(user) {
         }
         if (upcomingSection) {
             upcomingSection.style.display = showBase ? '' : 'none';
+        }
+        if (todaySection) {
+            todaySection.style.display = showBase ? '' : 'none';
         }
         if (historyPanel) {
             historyPanel.style.display = showBase ? '' : 'none';
@@ -4987,11 +5375,32 @@ async function loadDashboardPage(user) {
         }
     });
 
+    notificationsButton?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (notificationPanel?.classList.contains('is-hidden')) {
+            openNotificationPanel();
+        } else {
+            closeNotificationPanel();
+        }
+    });
+
+    notificationPanel?.addEventListener('click', (event) => event.stopPropagation());
+
+    notificationsMarkRead?.addEventListener('click', () => {
+        const ids = getReadNotificationIds();
+        buildNotifications().forEach((item) => ids.add(item.id));
+        setReadNotificationIds(ids);
+        renderNotifications();
+    });
+
+    document.addEventListener('click', () => closeNotificationPanel());
+
     window.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') {
             return;
         }
 
+        closeNotificationPanel();
         if (profileModal && !profileModal.classList.contains('is-hidden')) {
             closeProfileModal();
         }
@@ -5002,6 +5411,13 @@ async function loadDashboardPage(user) {
 
     applyWorkspaceView('dashboard');
     await Promise.all([refreshRecordings(), refreshMeetings()]);
+
+    // Keeps "starts in N min" copy and the unread badge honest without a reload.
+    setInterval(() => {
+        renderTodaySchedule();
+        renderNotifications();
+    }, 60000);
+    setInterval(refreshMeetings, 5 * 60000);
 }
 async function bootstrap() {
     initializeTheme();
@@ -5039,8 +5455,8 @@ async function bootstrap() {
             await loadMeetingPage(currentUser);
         } catch (error) {
             if (error.status === 409 || /ended/i.test(String(error.message || ''))) {
-                alert('This meeting has ended. Returning to your dashboard.');
-                window.location.replace('dashboard.html');
+                showToast('This meeting has ended. Returning to your dashboard.', { tone: 'info', duration: 5000 });
+                setTimeout(() => window.location.replace('dashboard.html'), 1600);
                 return;
             }
             throw error;
@@ -5051,6 +5467,6 @@ async function bootstrap() {
 document.addEventListener('DOMContentLoaded', () => {
     bootstrap().catch((error) => {
         console.error(error);
-        alert(error.message || 'Unable to load the page.');
+        showToast(error.message || 'Unable to load the page.', { tone: 'error', duration: 6000 });
     });
 });
