@@ -114,12 +114,24 @@ header {
 
 main {
     display: grid;
-    grid-template-columns: 1.15fr 0.95fr;
+    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 460px);
     align-items: center;
-    gap: 200px;
+    justify-content: center;
+    gap: clamp(24px, 5vw, 72px);
     width: 100%;
     min-height: calc(100vh - 120px);
-    padding: 40px clamp(24px, 4vw, 80px);
+    padding: 40px clamp(20px, 4vw, 72px);
+}
+
+@media (max-width: 980px) {
+    main {
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: center;
+    }
+
+    .hero-panel {
+        display: none;
+    }
 }
 
 .hero-panel {
@@ -133,7 +145,6 @@ main {
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    flex-shrink: 0;
     background-image: url('../images/content.jpeg');
     background-size: cover;
     background-position: center;
@@ -149,7 +160,6 @@ main {
     overflow: visible;
     display: flex;
     flex-direction: column;
-    flex-shrink: 0;
 }
 
 .signup-panel .section-description {
@@ -532,8 +542,12 @@ main {
     inset: 0;
     z-index: 60;
     display: grid;
-    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: safe center;
+    justify-items: center;
     padding: 24px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: rgba(2, 6, 23, 0.6);
     backdrop-filter: blur(16px);
 }
@@ -3374,19 +3388,450 @@ textarea.is-invalid {
     font-weight: 600;
 }
 
-/* Dashboard recordings */
-.recordings-panel {
-    margin-top: 20px;
+/* Shared focus + validation styling for form controls */
+.signup-panel input:focus,
+.authentication-form input:focus,
+.social-auth-form input:focus,
+.profile-form input:focus,
+.profile-form select:focus,
+.join-card input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.18);
+}
+
+.form-row .field-error,
+.form-group .field-error {
+    margin-top: -6px;
+    margin-bottom: 4px;
+}
+
+.agreement-row {
+    margin-top: 6px;
+}
+
+/* Buttons that should size to their content instead of stretching */
+.auto-button,
+.share-field__row .primary-button,
+.share-field__row .secondary-button,
+.stacked-form__actions .primary-button,
+.stacked-form__actions .secondary-button,
+.poll-form__actions .primary-button,
+.poll-form__actions .secondary-button,
+.profile-form-actions .primary-button,
+.profile-form-actions .secondary-button,
+.social-auth-actions .primary-button,
+.social-auth-actions .secondary-button,
+.host-control-actions .secondary-button,
+.calendar-toolbar .secondary-button,
+.join-hero .primary-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    white-space: nowrap;
+}
+
+.share-field__row .primary-button,
+.share-field__row .secondary-button {
+    flex: 0 0 auto;
+    padding-inline: 22px;
+}
+
+.share-field__row input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* Generic surface + layout primitives */
+.workspace-panel {
+    display: grid;
+    gap: 20px;
+    margin-bottom: 26px;
+}
+
+.surface-card {
+    padding: 22px;
+    border-radius: 24px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.workspace-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+    align-items: start;
+}
+
+.pill-count {
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.stack-list {
+    display: grid;
+    gap: 10px;
+}
+
+.stack-list__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 13px 16px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface-soft);
+}
+
+.stack-list__row > div:first-child {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.stack-list__row strong {
+    color: var(--text);
+    font-size: 14px;
+}
+
+.stack-list__row span {
+    color: var(--muted);
+    font-size: 12.5px;
+}
+
+.stack-list__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+}
+
+.status-chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: capitalize;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.status-chip--active {
+    border-color: var(--success);
+    color: var(--success);
+}
+
+.status-chip--scheduled {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.table-scroll {
+    width: 100%;
+    overflow-x: auto;
+}
+
+/* Stacked forms */
+.stacked-form {
+    display: grid;
+    gap: 14px;
+}
+
+.stacked-form__row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+}
+
+.stacked-form__field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.stacked-form__field > span {
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 700;
+}
+
+.stacked-form__field > span em {
+    font-style: normal;
+    font-weight: 500;
+    opacity: 0.7;
+}
+
+.stacked-form__field input,
+.stacked-form__field select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface-soft);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.stacked-form__field input:focus,
+.stacked-form__field select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(91, 108, 255, 0.18);
+}
+
+.stacked-form__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Toggle rows */
+.toggle-list {
+    display: grid;
+    gap: 10px;
+}
+
+.toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface-soft);
+    cursor: pointer;
+    transition: border-color 0.18s ease;
+}
+
+.toggle-row:hover {
+    border-color: var(--accent-soft, var(--accent));
+}
+
+.toggle-row input[type="checkbox"] {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    accent-color: var(--accent);
+}
+
+.toggle-row__copy {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.toggle-row__copy strong {
+    color: var(--text);
+    font-size: 14px;
+}
+
+.toggle-row__copy small {
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+/* Calendar */
+.calendar-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 20px;
+    align-items: start;
+}
+
+.calendar-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.calendar-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.calendar-nav strong {
+    min-width: 160px;
+    text-align: center;
+    color: var(--text);
+    font-size: 17px;
+}
+
+.calendar-weekdays,
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.calendar-weekday {
+    padding-bottom: 6px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.calendar-day {
+    display: grid;
+    align-content: start;
+    gap: 5px;
+    min-height: 92px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface-soft);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.calendar-day:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.calendar-day.is-muted {
+    opacity: 0.42;
+}
+
+.calendar-day.is-today .calendar-day__number {
+    background: var(--accent);
+    color: #fff;
+}
+
+.calendar-day.is-selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(91, 108, 255, 0.28);
+}
+
+.calendar-day__number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    font-size: 12.5px;
+    font-weight: 700;
+}
+
+.calendar-day__chips {
+    display: grid;
+    gap: 3px;
+}
+
+.calendar-chip {
+    overflow: hidden;
+    padding: 3px 7px;
+    border-radius: 7px;
+    background: rgba(91, 108, 255, 0.16);
+    color: var(--accent);
+    font-size: 10.5px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calendar-chip--active {
+    background: rgba(34, 197, 94, 0.18);
+    color: var(--success);
+}
+
+.calendar-chip--ended {
+    background: var(--surface);
+    color: var(--muted);
+}
+
+.calendar-day__more {
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 600;
+}
+
+.calendar-detail {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    position: sticky;
+    top: 20px;
+}
+
+@media (max-width: 900px) {
+    .calendar-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .calendar-detail {
+        position: static;
+    }
+
+    .calendar-day {
+        min-height: 74px;
+    }
+}
+
+/* Recordings + history table sizing */
+.history-table--recordings th:nth-child(4),
+.history-table--recordings td:nth-child(4),
+.history-table--recordings th:nth-child(5),
+.history-table--recordings td:nth-child(5) {
+    width: 96px;
+}
+
+.history-table--recordings th:last-child,
+.history-table--recordings td:last-child,
+.history-table--history th:last-child,
+.history-table--history td:last-child {
+    width: 168px;
 }
 
 .recording-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
 }
 
-.recording-actions a.secondary-button {
-    display: inline-flex;
-    align-items: center;
+.recording-actions a.secondary-button,
+.recording-actions button {
+    width: auto;
+    flex: none;
+    white-space: nowrap;
     text-decoration: none;
+}
+
+@media (max-width: 640px) {
+    .stack-list__row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .stack-list__actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .calendar-nav strong {
+        min-width: 120px;
+        font-size: 15px;
+    }
 }

@@ -15,6 +15,7 @@ const {
     getDashboardData,
     createMeeting,
     getMeetingByRoomCode,
+    getMeetingsForUser,
     joinMeetingRoom,
     getDatabase,
     updateParticipantState,
@@ -968,6 +969,15 @@ app.post('/api/meetings', requireAuth, async (req, res, next) => {
                 title: meeting.title
             }
         });
+    } catch (error) {
+        return next(error);
+    }
+});
+
+app.get('/api/meetings', requireAuth, async (req, res, next) => {
+    try {
+        const meetings = await getMeetingsForUser(req.user.id);
+        return res.json({ meetings });
     } catch (error) {
         return next(error);
     }

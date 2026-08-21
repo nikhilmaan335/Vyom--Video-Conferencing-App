@@ -948,6 +948,40 @@ async function updateMeetingChatMessage(roomCode, messageId, message) {
     };
 }
 
+async function getMeetingsForUser(userId) {
+    const db = await getDatabase();
+    const rows = await db.all(
+        `
+            SELECT DISTINCT meetings.*, teams.name AS team_name,
+                   host.first_name AS host_first_name, host.last_name AS host_last_name, host.email AS host_email
+            FROM meetings
+            LEFT JOIN teams ON teams.id = meetings.team_id
+            LEFT JOIN users AS host ON host.id = meetings.host_user_id
+            LEFT JOIN meeting_participants ON meeting_participants.meeting_id = meetings.id
+            WHERE meetings.host_user_id = ? OR meeting_participants.user_id = ?
+            ORDER BY COALESCE(meetings.scheduled_at, meetings.created_at) ASC
+        `,
+        [userId, userId]
+    );
+
+    return rows.map((meeting) => ({
+        id: meeting.id,
+        roomCode: meeting.room_code,
+        title: meeting.title,
+        description: meeting.description,
+        teamName: meeting.team_name || 'General',
+        status: meeting.status,
+        scheduledAt: meeting.scheduled_at,
+        startedAt: meeting.started_at,
+        endedAt: meeting.ended_at,
+        createdAt: meeting.created_at,
+        hostUserId: meeting.host_user_id,
+        hostName: `${meeting.host_first_name || ''} ${meeting.host_last_name || ''}`.trim()
+            || String(meeting.host_email || '').split('@')[0],
+        isHost: meeting.host_user_id === userId
+    }));
+}
+
 function mapRecordingRow(row) {
     if (!row) {
         return null;
@@ -1068,6 +1102,7 @@ module.exports = {
     getDashboardData,
     createMeeting,
     getMeetingByRoomCode,
+    getMeetingsForUser,
     joinMeetingRoom,
     updateParticipantState,
     leaveMeetingRoom,

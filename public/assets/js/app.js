@@ -14,16 +14,9 @@ function getBackendOrigin() {
         return configuredOrigin.replace(/\/+$/, '');
     }
 
+    // Pages opened straight from disk have no server of their own to talk to.
     if (window.location.protocol === 'file:') {
         return `http://localhost:${DEFAULT_LOCAL_BACKEND_PORT}`;
-    }
-
-    if (window.location.port === DEFAULT_LOCAL_BACKEND_PORT) {
-        return window.location.origin;
-    }
-
-    if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
-        return `${window.location.protocol}//${window.location.hostname}:${DEFAULT_LOCAL_BACKEND_PORT}`;
     }
 
     return window.location.origin;
@@ -108,6 +101,34 @@ function formatMeetingDuration(startedAt, endedAt) {
     const durationMs = new Date(endedAt).getTime() - new Date(startedAt).getTime();
     const durationMinutes = Math.max(1, Math.round(durationMs / 60000));
     return `${durationMinutes} min`;
+}
+
+function toDateKey(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function toDateTimeLocalValue(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return localDate.toISOString().slice(0, 16);
+}
+
+function formatTimeOfDay(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+
+    return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
 }
 
 function formatFileSize(bytes) {
@@ -4027,7 +4048,12 @@ async function loadMeetingPage(user) {
 async function loadDashboardPage(user) {
     let dashboardData = await requestJson('/api/dashboard');
     let recordings = [];
+    let allMeetings = [];
     let currentWorkspaceView = 'dashboard';
+    const calendarState = {
+        cursor: new Date(),
+        selectedKey: toDateKey(new Date())
+    };
 
     const userName = document.getElementById('dashboard-user-name');
     const userEmail = document.getElementById('dashboard-user-email');
@@ -4058,6 +4084,15 @@ async function loadDashboardPage(user) {
     const upcomingSection = document.querySelector('.upcoming-section');
     const historyPanel = document.querySelector('.history-panel');
     const recordingsPanel = document.getElementById('recordings-panel');
+    const meetingModal = document.getElementById('meeting-modal');
+    const meetingModalForm = document.getElementById('meeting-modal-form');
+    const meetingModalTitleInput = document.getElementById('meeting-modal-title-input');
+    const meetingModalDescription = document.getElementById('meeting-modal-description');
+    const meetingModalTeam = document.getElementById('meeting-modal-team');
+    const meetingModalTime = document.getElementById('meeting-modal-time');
+    const meetingModalAutoJoin = document.getElementById('meeting-modal-auto-join');
+    const meetingModalClose = document.getElementById('meeting-modal-close');
+    const meetingModalCancel = document.getElementById('meeting-modal-cancel');
     let profileAvatarDataUrl = dashboardData.profile.avatarUrl || '';
 
     function ensureWorkspacePanel() {
@@ -4065,7 +4100,7 @@ async function loadDashboardPage(user) {
         if (!panel) {
             panel = document.createElement('section');
             panel.id = 'dashboard-workspace-panel';
-            panel.className = 'upcoming-section';
+            panel.className = 'workspace-panel';
             panel.style.display = 'none';
             document.querySelector('.dashboard-content')?.insertBefore(panel, dashboardOverview?.nextSibling || null);
         }
@@ -4073,13 +4108,6 @@ async function loadDashboardPage(user) {
     }
 
     const workspacePanel = ensureWorkspacePanel();
-
-    function showWorkspaceMessage(message) {
-        const banner = workspacePanel?.querySelector('[data-workspace-banner]');
-        if (banner) {
-            banner.textContent = message;
-        }
-    }
 
     function updateProfileImage(source) {
         const resolvedSource = source || 'assets/images/logo.png';
@@ -4154,7 +4182,20 @@ async function loadDashboardPage(user) {
         renderTeamList(dashboardData.teams);
         renderUpcomingMeetings(dashboardData.upcomingMeetings);
         renderMeetingHistory(dashboardData.meetingHistory);
-        await refreshRecordings();
+        await Promise.all([refreshRecordings(), refreshMeetings()]);
+    }
+
+    async function refreshMeetings() {
+        try {
+            const response = await requestJson('/api/meetings');
+            allMeetings = response.meetings || [];
+        } catch (error) {
+            allMeetings = [];
+        }
+
+        if (currentWorkspaceView === 'calendar') {
+            renderCalendarWorkspace();
+        }
     }
 
     async function refreshRecordings() {
@@ -4177,27 +4218,86 @@ async function loadDashboardPage(user) {
         redirectToMeeting(normalizedRoomCode);
     }
 
+    function populateTeamOptions(selectElement, selectedId = '') {
+        if (!selectElement) {
+            return;
+        }
+
+        selectElement.innerHTML = [
+            '<option value="">No team</option>',
+            ...dashboardData.teams.map((team) => `<option value="${escapeHtml(team.id)}">${escapeHtml(team.name)}</option>`)
+        ].join('');
+        selectElement.value = selectedId ? String(selectedId) : '';
+    }
+
+    function openMeetingModal({ scheduledAt = new Date(), title = '' } = {}) {
+        populateTeamOptions(meetingModalTeam);
+        if (meetingModalTitleInput) {
+            meetingModalTitleInput.value = title;
+        }
+        if (meetingModalDescription) {
+            meetingModalDescription.value = '';
+        }
+        if (meetingModalTime) {
+            meetingModalTime.value = toDateTimeLocalValue(scheduledAt);
+        }
+        if (meetingModalAutoJoin) {
+            meetingModalAutoJoin.checked = localStorage.getItem('vyomDashboardAutoJoin') !== 'false';
+        }
+        setFieldError('meeting-modal-error', '');
+        meetingModal?.classList.remove('is-hidden');
+        meetingModal?.setAttribute('aria-hidden', 'false');
+        meetingModalTitleInput?.focus();
+    }
+
+    function closeMeetingModal() {
+        meetingModal?.classList.add('is-hidden');
+        meetingModal?.setAttribute('aria-hidden', 'true');
+    }
+
+    function getMeetingDateKey(meeting) {
+        return toDateKey(meeting.scheduledAt || meeting.startedAt || meeting.createdAt);
+    }
+
+    function getMeetingsByDate() {
+        const map = new Map();
+        allMeetings.forEach((meeting) => {
+            const key = getMeetingDateKey(meeting);
+            if (!key) {
+                return;
+            }
+            if (!map.has(key)) {
+                map.set(key, []);
+            }
+            map.get(key).push(meeting);
+        });
+
+        map.forEach((list) => {
+            list.sort((left, right) => new Date(left.scheduledAt || left.createdAt) - new Date(right.scheduledAt || right.createdAt));
+        });
+        return map;
+    }
+
     function renderMeetingsWorkspace() {
         if (!workspacePanel) {
             return;
         }
 
         workspacePanel.innerHTML = `
-            <div class="section-header"><div><h2>Meetings Workspace</h2><p>Schedule a session or jump into an active room.</p></div></div>
-            <div class="empty-state-card" data-workspace-banner>Create your next meeting in one step.</div>
-            <form id="dashboard-workspace-meeting-form" class="join-card" style="margin-top:14px;">
-                <input type="text" id="workspace-meeting-title" placeholder="Meeting title" required>
-                <input type="text" id="workspace-meeting-description" placeholder="Description (optional)">
-                <select id="workspace-meeting-team" class="workspace-select">
-                    <option value="">No team</option>
-                    ${dashboardData.teams.map((team) => `<option value="${escapeHtml(team.id)}">${escapeHtml(team.name)}</option>`).join('')}
-                </select>
-                <input type="datetime-local" id="workspace-meeting-time">
-                <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:var(--muted);"><input type="checkbox" id="workspace-meeting-auto-join" checked>Join immediately after creating</label>
-                <button type="submit" class="primary-button">Schedule Meeting</button>
-            </form>
-            <div class="panel-header" style="margin-top:24px;"><h2>Upcoming Queue</h2></div>
-            <div class="upcoming-cards" id="workspace-upcoming-list"></div>
+            <div class="section-header">
+                <div><h2>Meetings</h2><p>Schedule a session or jump straight into an active room.</p></div>
+                <button class="primary-button auto-button" id="workspace-new-meeting" type="button">Schedule meeting</button>
+            </div>
+            <div class="workspace-grid">
+                <section class="surface-card">
+                    <div class="panel-header"><h2>Upcoming</h2><span class="pill-count">${dashboardData.upcomingMeetings.length}</span></div>
+                    <div class="upcoming-cards" id="workspace-upcoming-list"></div>
+                </section>
+                <section class="surface-card">
+                    <div class="panel-header"><h2>Recently ended</h2><span class="pill-count">${dashboardData.meetingHistory.length}</span></div>
+                    <div class="stack-list" id="workspace-recent-list"></div>
+                </section>
+            </div>
         `;
 
         const upcomingList = document.getElementById('workspace-upcoming-list');
@@ -4212,51 +4312,176 @@ async function loadDashboardPage(user) {
                         <h3>${escapeHtml(meeting.title)}</h3>
                         <p class="meeting-description">${escapeHtml(meeting.description || 'Ready to start.')}</p>
                         <div class="meeting-meta"><span>${formatDateTime(meeting.scheduledAt)}</span><span>Room: ${escapeHtml(meeting.roomCode)}</span></div>
-                        <button class="secondary-button small-button" type="button" data-room-code="${escapeHtml(meeting.roomCode)}">Join</button>
+                        <div class="meeting-footer">
+                            <span class="status-chip status-chip--${escapeHtml(meeting.status)}">${escapeHtml(meeting.status)}</span>
+                            <button class="secondary-button small-button auto-button" type="button" data-room-code="${escapeHtml(meeting.roomCode)}">Join</button>
+                        </div>
                     </article>
                 `).join('')
-                : '<div class="empty-state-card">No upcoming meetings yet.</div>';
-
-            upcomingList.querySelectorAll('[data-room-code]').forEach((button) => {
-                button.addEventListener('click', async () => {
-                    await joinRoomAndRedirect(button.dataset.roomCode);
-                });
-            });
+                : '<div class="empty-state-card">No upcoming meetings yet. Schedule one to get started.</div>';
         }
 
-        document.getElementById('dashboard-workspace-meeting-form')?.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const title = document.getElementById('workspace-meeting-title')?.value.trim();
-            const description = document.getElementById('workspace-meeting-description')?.value.trim() || '';
-            const teamId = document.getElementById('workspace-meeting-team')?.value || null;
-            const scheduledLocal = document.getElementById('workspace-meeting-time')?.value;
-            const autoJoin = document.getElementById('workspace-meeting-auto-join')?.checked;
+        const recentList = document.getElementById('workspace-recent-list');
+        if (recentList) {
+            recentList.innerHTML = dashboardData.meetingHistory.length
+                ? dashboardData.meetingHistory.slice(0, 8).map((meeting) => `
+                    <div class="stack-list__row">
+                        <div>
+                            <strong>${escapeHtml(meeting.title)}</strong>
+                            <span>${formatDateTime(meeting.endedAt || meeting.startedAt)} • ${formatMeetingDuration(meeting.startedAt, meeting.endedAt)}</span>
+                        </div>
+                        <button class="secondary-button small-button auto-button" type="button" data-room-code="${escapeHtml(meeting.roomCode)}">Relaunch</button>
+                    </div>
+                `).join('')
+                : '<div class="empty-state-card">Nothing here yet.</div>';
+        }
 
-            if (!title) {
-                showWorkspaceMessage('Meeting title is required.');
-                return;
-            }
-
-            const response = await requestJson('/api/meetings', {
-                method: 'POST',
-                body: {
-                    title,
-                    description,
-                    teamId,
-                    scheduledAt: scheduledLocal ? new Date(scheduledLocal).toISOString() : new Date().toISOString()
-                }
-            });
-
-            if (autoJoin) {
-                await joinRoomAndRedirect(response.meeting.roomCode);
-                return;
-            }
-
-            showWorkspaceMessage('Meeting created successfully.');
-            await refreshDashboardData();
-            renderMeetingsWorkspace();
+        document.getElementById('workspace-new-meeting')?.addEventListener('click', () => openMeetingModal());
+        workspacePanel.querySelectorAll('[data-room-code]').forEach((button) => {
+            button.addEventListener('click', () => joinRoomAndRedirect(button.dataset.roomCode));
         });
     }
+
+    function renderCalendarWorkspace() {
+        if (!workspacePanel) {
+            return;
+        }
+
+        const meetingsByDate = getMeetingsByDate();
+        const cursor = calendarState.cursor;
+        const monthLabel = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(cursor);
+        const firstOfMonth = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+        const gridStart = new Date(firstOfMonth);
+        gridStart.setDate(gridStart.getDate() - firstOfMonth.getDay());
+        const todayKey = toDateKey(new Date());
+
+        const dayCells = Array.from({ length: 42 }, (_, index) => {
+            const day = new Date(gridStart);
+            day.setDate(gridStart.getDate() + index);
+            const key = toDateKey(day);
+            const dayMeetings = meetingsByDate.get(key) || [];
+            const isOtherMonth = day.getMonth() !== cursor.getMonth();
+
+            const chips = dayMeetings.slice(0, 2).map((meeting) => `
+                <span class="calendar-chip calendar-chip--${escapeHtml(meeting.status)}" title="${escapeHtml(meeting.title)}">
+                    ${escapeHtml(formatTimeOfDay(meeting.scheduledAt || meeting.createdAt))} ${escapeHtml(meeting.title)}
+                </span>
+            `).join('');
+
+            return `
+                <button class="calendar-day ${isOtherMonth ? 'is-muted' : ''} ${key === todayKey ? 'is-today' : ''} ${key === calendarState.selectedKey ? 'is-selected' : ''}"
+                        type="button" data-calendar-day="${key}">
+                    <span class="calendar-day__number">${day.getDate()}</span>
+                    <span class="calendar-day__chips">${chips}</span>
+                    ${dayMeetings.length > 2 ? `<span class="calendar-day__more">+${dayMeetings.length - 2} more</span>` : ''}
+                </button>
+            `;
+        }).join('');
+
+        const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+            .map((label) => `<span class="calendar-weekday">${label}</span>`)
+            .join('');
+
+        workspacePanel.innerHTML = `
+            <div class="section-header">
+                <div><h2>Calendar</h2><p>Every meeting you host or attend, laid out by day.</p></div>
+                <button class="primary-button auto-button" id="calendar-new-meeting" type="button">Schedule meeting</button>
+            </div>
+            <div class="calendar-layout">
+                <section class="surface-card calendar-card">
+                    <div class="calendar-toolbar">
+                        <div class="calendar-nav">
+                            <button class="icon-button" id="calendar-prev" type="button" aria-label="Previous month">‹</button>
+                            <strong id="calendar-month-label">${escapeHtml(monthLabel)}</strong>
+                            <button class="icon-button" id="calendar-next" type="button" aria-label="Next month">›</button>
+                        </div>
+                        <button class="secondary-button auto-button" id="calendar-today" type="button">Today</button>
+                    </div>
+                    <div class="calendar-weekdays">${weekdayLabels}</div>
+                    <div class="calendar-grid">${dayCells}</div>
+                </section>
+                <aside class="surface-card calendar-detail" id="calendar-detail"></aside>
+            </div>
+        `;
+
+        renderCalendarDetail(meetingsByDate);
+
+        document.getElementById('calendar-prev')?.addEventListener('click', () => {
+            calendarState.cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
+            renderCalendarWorkspace();
+        });
+        document.getElementById('calendar-next')?.addEventListener('click', () => {
+            calendarState.cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+            renderCalendarWorkspace();
+        });
+        document.getElementById('calendar-today')?.addEventListener('click', () => {
+            calendarState.cursor = new Date();
+            calendarState.selectedKey = toDateKey(new Date());
+            renderCalendarWorkspace();
+        });
+        document.getElementById('calendar-new-meeting')?.addEventListener('click', () => {
+            openMeetingModal({ scheduledAt: calendarSelectedDateTime() });
+        });
+        workspacePanel.querySelectorAll('[data-calendar-day]').forEach((button) => {
+            button.addEventListener('click', () => {
+                calendarState.selectedKey = button.dataset.calendarDay;
+                renderCalendarWorkspace();
+            });
+        });
+    }
+
+    function calendarSelectedDateTime() {
+        const [year, month, day] = String(calendarState.selectedKey || '').split('-').map(Number);
+        if (!year) {
+            return new Date();
+        }
+
+        const now = new Date();
+        const selected = new Date(year, month - 1, day, now.getHours() + 1, 0, 0, 0);
+        return selected;
+    }
+
+    function renderCalendarDetail(meetingsByDate) {
+        const detail = document.getElementById('calendar-detail');
+        if (!detail) {
+            return;
+        }
+
+        const dayMeetings = meetingsByDate.get(calendarState.selectedKey) || [];
+        const selectedDate = calendarSelectedDateTime();
+        const heading = new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long' }).format(selectedDate);
+
+        detail.innerHTML = `
+            <div class="panel-header"><h2>${escapeHtml(heading)}</h2><span class="pill-count">${dayMeetings.length}</span></div>
+            <div class="stack-list">
+                ${dayMeetings.length
+                    ? dayMeetings.map((meeting) => `
+                        <div class="stack-list__row">
+                            <div>
+                                <strong>${escapeHtml(meeting.title)}</strong>
+                                <span>${escapeHtml(formatTimeOfDay(meeting.scheduledAt || meeting.createdAt))} • ${escapeHtml(meeting.teamName)} • ${escapeHtml(meeting.isHost ? 'You host' : meeting.hostName)}</span>
+                            </div>
+                            <div class="stack-list__actions">
+                                <span class="status-chip status-chip--${escapeHtml(meeting.status)}">${escapeHtml(meeting.status)}</span>
+                                ${meeting.status === 'ended'
+                                    ? ''
+                                    : `<button class="secondary-button small-button auto-button" type="button" data-room-code="${escapeHtml(meeting.roomCode)}">Join</button>`}
+                            </div>
+                        </div>
+                    `).join('')
+                    : '<div class="empty-state-card">Nothing scheduled for this day.</div>'}
+            </div>
+            <button class="secondary-button" id="calendar-detail-schedule" type="button">Schedule on this day</button>
+        `;
+
+        detail.querySelectorAll('[data-room-code]').forEach((button) => {
+            button.addEventListener('click', () => joinRoomAndRedirect(button.dataset.roomCode));
+        });
+        document.getElementById('calendar-detail-schedule')?.addEventListener('click', () => {
+            openMeetingModal({ scheduledAt: calendarSelectedDateTime() });
+        });
+    }
+
 
     function renderTeamsWorkspace() {
         if (!workspacePanel) {
@@ -4264,15 +4489,30 @@ async function loadDashboardPage(user) {
         }
 
         workspacePanel.innerHTML = `
-            <div class="section-header"><div><h2>Teams Workspace</h2><p>Create and organize teams for focused collaboration.</p></div></div>
-            <div class="empty-state-card" data-workspace-banner>Create a team to group meetings and members.</div>
-            <form id="dashboard-workspace-team-form" class="join-card" style="margin-top:14px;">
-                <input type="text" id="workspace-team-name" placeholder="Team name" required>
-                <input type="text" id="workspace-team-description" placeholder="Team description">
-                <button type="submit" class="primary-button">Create Team</button>
-            </form>
-            <div class="panel-header" style="margin-top:24px;"><h2>Your Teams</h2></div>
-            <div class="team-list" id="workspace-team-list"></div>
+            <div class="section-header"><div><h2>Teams</h2><p>Group your meetings and members into focused spaces.</p></div></div>
+            <div class="workspace-grid">
+                <section class="surface-card">
+                    <div class="panel-header"><h2>Create a team</h2></div>
+                    <form id="dashboard-workspace-team-form" class="stacked-form" novalidate>
+                        <label class="stacked-form__field">
+                            <span>Team name</span>
+                            <input type="text" id="workspace-team-name" maxlength="80" placeholder="Design Studio" autocomplete="off">
+                        </label>
+                        <label class="stacked-form__field">
+                            <span>Description <em>optional</em></span>
+                            <input type="text" id="workspace-team-description" maxlength="160" placeholder="What does this team work on?" autocomplete="off">
+                        </label>
+                        <p class="form-error" id="workspace-team-error" role="alert"></p>
+                        <div class="stacked-form__actions">
+                            <button type="submit" class="primary-button auto-button">Create team</button>
+                        </div>
+                    </form>
+                </section>
+                <section class="surface-card">
+                    <div class="panel-header"><h2>Your teams</h2><span class="pill-count">${dashboardData.teams.length}</span></div>
+                    <div class="team-list" id="workspace-team-list"></div>
+                </section>
+            </div>
         `;
 
         const list = document.getElementById('workspace-team-list');
@@ -4282,29 +4522,32 @@ async function loadDashboardPage(user) {
                     <article class="team-card">
                         <strong>${escapeHtml(team.name)}</strong>
                         <span>${escapeHtml(team.description || 'No description')}</span>
-                        <small>${team.meetingCount} meetings</small>
+                        <small>${team.meetingCount} meeting${team.meetingCount === 1 ? '' : 's'}</small>
                     </article>
                 `).join('')
-                : '<div class="empty-state-card">No teams yet.</div>';
+                : '<div class="empty-state-card">No teams yet. Create your first one.</div>';
         }
 
         document.getElementById('dashboard-workspace-team-form')?.addEventListener('submit', async (event) => {
             event.preventDefault();
-            const name = document.getElementById('workspace-team-name')?.value.trim();
+            setFieldError('workspace-team-error', '');
+
+            const nameInput = document.getElementById('workspace-team-name');
+            const name = nameInput?.value.trim();
             const description = document.getElementById('workspace-team-description')?.value.trim() || '';
             if (!name) {
-                showWorkspaceMessage('Team name is required.');
+                setFieldError('workspace-team-error', 'Team name is required.', nameInput);
+                nameInput?.focus();
                 return;
             }
 
-            await requestJson('/api/teams', {
-                method: 'POST',
-                body: { name, description }
-            });
-
-            showWorkspaceMessage('Team created successfully.');
-            await refreshDashboardData();
-            renderTeamsWorkspace();
+            try {
+                await requestJson('/api/teams', { method: 'POST', body: { name, description } });
+                await refreshDashboardData();
+                renderTeamsWorkspace();
+            } catch (error) {
+                setFieldError('workspace-team-error', error.message || 'Unable to create the team.');
+            }
         });
     }
 
@@ -4314,14 +4557,15 @@ async function loadDashboardPage(user) {
         }
 
         workspacePanel.innerHTML = `
-            <div class="section-header"><div><h2>Meeting History Workspace</h2><p>Review outcomes and relaunch previous rooms.</p></div></div>
-            <div class="empty-state-card" data-workspace-banner>Click relaunch to re-enter a previous room.</div>
-            <div class="history-list" style="margin-top:14px;">
-                <table class="history-table">
-                    <thead><tr><th>Meeting</th><th>Team</th><th>Ended</th><th>Duration</th><th>Action</th></tr></thead>
-                    <tbody id="workspace-history-body"></tbody>
-                </table>
-            </div>
+            <div class="section-header"><div><h2>Meeting history</h2><p>Review outcomes and relaunch previous rooms.</p></div></div>
+            <section class="surface-card">
+                <div class="table-scroll">
+                    <table class="history-table history-table--history">
+                        <thead><tr><th>Meeting</th><th>Team</th><th>Ended</th><th>Duration</th><th>Action</th></tr></thead>
+                        <tbody id="workspace-history-body"></tbody>
+                    </table>
+                </div>
+            </section>
         `;
 
         const body = document.getElementById('workspace-history-body');
@@ -4336,15 +4580,13 @@ async function loadDashboardPage(user) {
                     <td>${escapeHtml(meeting.teamName)}</td>
                     <td>${formatDateTime(meeting.endedAt || meeting.startedAt || meeting.scheduledAt)}</td>
                     <td>${formatMeetingDuration(meeting.startedAt, meeting.endedAt)}</td>
-                    <td><button class="secondary-button small-button" type="button" data-room-code="${escapeHtml(meeting.roomCode)}">Relaunch</button></td>
+                    <td><button class="secondary-button small-button auto-button" type="button" data-room-code="${escapeHtml(meeting.roomCode)}">Relaunch</button></td>
                 </tr>
             `).join('')
             : '<tr><td colspan="5">No history yet.</td></tr>';
 
         body.querySelectorAll('[data-room-code]').forEach((button) => {
-            button.addEventListener('click', async () => {
-                await joinRoomAndRedirect(button.dataset.roomCode);
-            });
+            button.addEventListener('click', () => joinRoomAndRedirect(button.dataset.roomCode));
         });
     }
 
@@ -4355,13 +4597,14 @@ async function loadDashboardPage(user) {
 
         workspacePanel.innerHTML = `
             <div class="section-header"><div><h2>Recordings</h2><p>Download recordings captured during your meetings.</p></div></div>
-            <div class="empty-state-card" data-workspace-banner>Recordings are stored securely on the Vyom server.</div>
-            <div class="history-list" style="margin-top:14px;">
-                <table class="history-table">
-                    <thead><tr><th>Recording</th><th>Meeting</th><th>Recorded</th><th>Length</th><th>Size</th><th>Action</th></tr></thead>
-                    <tbody id="workspace-recordings-body"></tbody>
-                </table>
-            </div>
+            <section class="surface-card">
+                <div class="table-scroll">
+                    <table class="history-table history-table--recordings">
+                        <thead><tr><th>Recording</th><th>Meeting</th><th>Recorded</th><th>Length</th><th>Size</th><th>Action</th></tr></thead>
+                        <tbody id="workspace-recordings-body"></tbody>
+                    </table>
+                </div>
+            </section>
         `;
 
         renderRecordingRows(recordings, document.getElementById('workspace-recordings-body'), refreshRecordings);
@@ -4374,33 +4617,67 @@ async function loadDashboardPage(user) {
 
         const compactEnabled = localStorage.getItem('vyomDashboardCompactView') === 'true';
         const autoJoinEnabled = localStorage.getItem('vyomDashboardAutoJoin') !== 'false';
+        const isDark = document.documentElement.dataset.theme === 'dark';
 
         workspacePanel.innerHTML = `
-            <div class="section-header"><div><h2>Workspace Settings</h2><p>Customize your dashboard behavior.</p></div></div>
-            <div class="empty-state-card" data-workspace-banner>Preferences are saved in your browser.</div>
-            <div class="join-card" style="margin-top:14px;">
-                <label style="display:flex; gap:8px; align-items:center; font-size:14px; color:var(--text);"><input type="checkbox" id="workspace-compact-toggle" ${compactEnabled ? 'checked' : ''}>Compact dashboard cards</label>
-                <label style="display:flex; gap:8px; align-items:center; font-size:14px; color:var(--text);"><input type="checkbox" id="workspace-auto-join-toggle" ${autoJoinEnabled ? 'checked' : ''}>Auto-join when using New Meeting</label>
-                <button id="workspace-theme-toggle" class="secondary-button" type="button">Toggle Theme</button>
-            </div>
+            <div class="section-header"><div><h2>Settings</h2><p>Customize how your workspace looks and behaves.</p></div></div>
+            <section class="surface-card">
+                <div class="panel-header"><h2>Preferences</h2><span class="pill-count">Saved locally</span></div>
+                <div class="toggle-list">
+                    <label class="toggle-row">
+                        <input type="checkbox" id="workspace-compact-toggle" ${compactEnabled ? 'checked' : ''}>
+                        <span class="toggle-row__copy">
+                            <strong>Compact dashboard cards</strong>
+                            <small>Fit more meetings on screen with tighter spacing.</small>
+                        </span>
+                    </label>
+                    <label class="toggle-row">
+                        <input type="checkbox" id="workspace-auto-join-toggle" ${autoJoinEnabled ? 'checked' : ''}>
+                        <span class="toggle-row__copy">
+                            <strong>Auto-join new meetings</strong>
+                            <small>Open the room right after you create a meeting.</small>
+                        </span>
+                    </label>
+                    <label class="toggle-row">
+                        <input type="checkbox" id="workspace-theme-toggle-input" ${isDark ? 'checked' : ''}>
+                        <span class="toggle-row__copy">
+                            <strong>Dark theme</strong>
+                            <small>Switch between the light and dark appearance.</small>
+                        </span>
+                    </label>
+                </div>
+            </section>
+            <section class="surface-card">
+                <div class="panel-header"><h2>Account</h2></div>
+                <div class="stack-list">
+                    <div class="stack-list__row">
+                        <div><strong>${escapeHtml(dashboardData.profile.name)}</strong><span>${escapeHtml(dashboardData.profile.email)}</span></div>
+                        <button class="secondary-button small-button auto-button" id="workspace-edit-profile" type="button">Edit profile</button>
+                    </div>
+                    <div class="stack-list__row">
+                        <div><strong>Sign out</strong><span>End your session on this device.</span></div>
+                        <button class="secondary-button small-button auto-button" id="workspace-sign-out" type="button">Sign out</button>
+                    </div>
+                </div>
+            </section>
         `;
 
         document.getElementById('workspace-compact-toggle')?.addEventListener('change', (event) => {
             const enabled = Boolean(event.target.checked);
             localStorage.setItem('vyomDashboardCompactView', String(enabled));
             document.body.classList.toggle('dashboard-compact', enabled);
-            showWorkspaceMessage('Compact view preference saved.');
         });
 
         document.getElementById('workspace-auto-join-toggle')?.addEventListener('change', (event) => {
             localStorage.setItem('vyomDashboardAutoJoin', String(Boolean(event.target.checked)));
-            showWorkspaceMessage('New meeting auto-join preference saved.');
         });
 
-        document.getElementById('workspace-theme-toggle')?.addEventListener('click', () => {
+        document.getElementById('workspace-theme-toggle-input')?.addEventListener('change', () => {
             document.getElementById('theme-toggle')?.click();
-            showWorkspaceMessage('Theme updated.');
         });
+
+        document.getElementById('workspace-edit-profile')?.addEventListener('click', openProfileModal);
+        document.getElementById('workspace-sign-out')?.addEventListener('click', handleSignOut);
     }
 
     function applyWorkspaceView(view) {
@@ -4426,14 +4703,16 @@ async function loadDashboardPage(user) {
         if (dashboardTitle) {
             dashboardTitle.textContent = showBase
                 ? 'Create, join and manage your meetings'
-                : `${view.charAt(0).toUpperCase()}${view.slice(1)} workspace`;
+                : `${view.charAt(0).toUpperCase()}${view.slice(1)}`;
         }
         if (dashboardLabel) {
-            dashboardLabel.textContent = showBase ? 'Workspace' : 'Focused View';
+            dashboardLabel.textContent = showBase ? 'Workspace' : 'Focused view';
         }
 
         if (view === 'meetings') {
             renderMeetingsWorkspace();
+        } else if (view === 'calendar') {
+            renderCalendarWorkspace();
         } else if (view === 'teams') {
             renderTeamsWorkspace();
         } else if (view === 'history') {
@@ -4443,6 +4722,12 @@ async function loadDashboardPage(user) {
         } else if (view === 'settings') {
             renderSettingsWorkspace();
         }
+    }
+
+    function activateNavLink(target) {
+        document.querySelectorAll('.sidebar-nav .nav-link').forEach((item) => item.classList.remove('active'));
+        document.querySelector(`.sidebar-nav .nav-link[data-target="${target}"]`)?.classList.add('active');
+        applyWorkspaceView(target);
     }
 
     if (userName) {
@@ -4579,48 +4864,85 @@ async function loadDashboardPage(user) {
         });
     }
 
-    document.getElementById('new-meeting-button')?.addEventListener('click', async () => {
-        const title = prompt('Meeting title', 'Instant Meeting') || 'Instant Meeting';
-        const response = await requestJson('/api/meetings', {
-            method: 'POST',
-            body: { title }
-        });
+    document.getElementById('new-meeting-button')?.addEventListener('click', () => openMeetingModal());
 
-        const autoJoin = localStorage.getItem('vyomDashboardAutoJoin') !== 'false';
-        if (autoJoin) {
-            await joinRoomAndRedirect(response.meeting.roomCode);
+    meetingModalClose?.addEventListener('click', closeMeetingModal);
+    meetingModalCancel?.addEventListener('click', closeMeetingModal);
+    meetingModal?.addEventListener('click', (event) => {
+        if (event.target === meetingModal) {
+            closeMeetingModal();
+        }
+    });
+
+    meetingModalForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setFieldError('meeting-modal-error', '');
+
+        const title = meetingModalTitleInput?.value.trim();
+        if (!title) {
+            setFieldError('meeting-modal-error', 'Give your meeting a title.', meetingModalTitleInput);
+            meetingModalTitleInput?.focus();
             return;
         }
 
-        await refreshDashboardData();
-        applyWorkspaceView(currentWorkspaceView);
+        const scheduledLocal = meetingModalTime?.value;
+        try {
+            const response = await requestJson('/api/meetings', {
+                method: 'POST',
+                body: {
+                    title,
+                    description: meetingModalDescription?.value.trim() || '',
+                    teamId: meetingModalTeam?.value || null,
+                    scheduledAt: scheduledLocal ? new Date(scheduledLocal).toISOString() : new Date().toISOString()
+                }
+            });
+
+            closeMeetingModal();
+
+            if (meetingModalAutoJoin?.checked) {
+                await joinRoomAndRedirect(response.meeting.roomCode);
+                return;
+            }
+
+            await refreshDashboardData();
+            applyWorkspaceView(currentWorkspaceView);
+        } catch (error) {
+            setFieldError('meeting-modal-error', error.message || 'Unable to create the meeting.');
+        }
     });
 
     const joinMeetingButton = document.getElementById('join-meeting-button');
     const meetingCodeInput = document.getElementById('meeting-code');
     if (joinMeetingButton && meetingCodeInput) {
-        joinMeetingButton.addEventListener('click', async () => {
+        const submitJoin = async () => {
             const roomCode = normalizeRoomCodeInput(meetingCodeInput.value.trim());
             if (!roomCode) {
-                alert('Please enter a meeting code or link.');
+                meetingCodeInput.classList.add('is-invalid');
+                meetingCodeInput.focus();
                 return;
             }
 
+            meetingCodeInput.classList.remove('is-invalid');
             await joinRoomAndRedirect(roomCode);
+        };
+
+        joinMeetingButton.addEventListener('click', submitJoin);
+        meetingCodeInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submitJoin();
+            }
         });
+        meetingCodeInput.addEventListener('input', () => meetingCodeInput.classList.remove('is-invalid'));
     }
 
     document.getElementById('dashboard-view-calendar-button')?.addEventListener('click', () => {
-        applyWorkspaceView('meetings');
-        document.querySelectorAll('.sidebar-nav .nav-link').forEach((item) => item.classList.remove('active'));
-        document.querySelector('.sidebar-nav .nav-link[data-target="meetings"]')?.classList.add('active');
+        activateNavLink('calendar');
     });
 
     document.getElementById('view-all-meetings-link')?.addEventListener('click', (event) => {
         event.preventDefault();
-        applyWorkspaceView('history');
-        document.querySelectorAll('.sidebar-nav .nav-link').forEach((item) => item.classList.remove('active'));
-        document.querySelector('.sidebar-nav .nav-link[data-target="history"]')?.classList.add('active');
+        activateNavLink('history');
     });
 
     document.querySelectorAll('.sidebar-nav .nav-link').forEach((link) => {
@@ -4666,12 +4988,20 @@ async function loadDashboardPage(user) {
     });
 
     window.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && profileModal && !profileModal.classList.contains('is-hidden')) {
+        if (event.key !== 'Escape') {
+            return;
+        }
+
+        if (profileModal && !profileModal.classList.contains('is-hidden')) {
             closeProfileModal();
+        }
+        if (meetingModal && !meetingModal.classList.contains('is-hidden')) {
+            closeMeetingModal();
         }
     });
 
     applyWorkspaceView('dashboard');
+    await Promise.all([refreshRecordings(), refreshMeetings()]);
 }
 async function bootstrap() {
     initializeTheme();

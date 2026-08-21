@@ -18,6 +18,7 @@
             <nav class="sidebar-nav">
                 <a href="#" class="nav-link active" data-target="dashboard">Dashboard</a>
                 <a href="#" class="nav-link" data-target="meetings">Meetings</a>
+                <a href="#" class="nav-link" data-target="calendar">Calendar</a>
                 <a href="#" class="nav-link" data-target="teams">Teams</a>
                 <a href="#" class="nav-link" data-target="history">History</a>
                 <a href="#" class="nav-link" data-target="recordings">Recordings</a>
@@ -136,19 +137,21 @@
                     <div class="panel-header">
                         <h2>Meeting Recordings</h2>
                     </div>
-                    <table class="history-table">
-                        <thead>
-                            <tr>
-                                <th>Recording</th>
-                                <th>Meeting</th>
-                                <th>Recorded</th>
-                                <th>Length</th>
-                                <th>Size</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="recordings-body"></tbody>
-                    </table>
+                    <div class="table-scroll">
+                        <table class="history-table history-table--recordings">
+                            <thead>
+                                <tr>
+                                    <th>Recording</th>
+                                    <th>Meeting</th>
+                                    <th>Recorded</th>
+                                    <th>Length</th>
+                                    <th>Size</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recordings-body"></tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
         </main>
@@ -227,6 +230,52 @@
                 <div class="profile-form-actions">
                     <button class="secondary-button" id="profile-cancel-button" type="button">Cancel</button>
                     <button class="primary-button" type="submit">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="social-auth-modal is-hidden meeting-modal" id="meeting-modal" aria-hidden="true">
+        <div class="social-auth-modal__card meeting-modal__card" role="dialog" aria-modal="true" aria-labelledby="meeting-modal-title">
+            <button class="social-auth-modal__close" id="meeting-modal-close" type="button" aria-label="Close meeting composer">✕</button>
+            <div class="social-auth-modal__header">
+                <p class="social-auth-modal__eyebrow">New meeting</p>
+                <h2 id="meeting-modal-title">Schedule a meeting</h2>
+                <p>Pick a time, add your team and share the room in one step.</p>
+            </div>
+
+            <form class="stacked-form" id="meeting-modal-form" novalidate>
+                <label class="stacked-form__field">
+                    <span>Meeting title</span>
+                    <input type="text" id="meeting-modal-title-input" maxlength="120" placeholder="Sprint planning" autocomplete="off">
+                </label>
+                <label class="stacked-form__field">
+                    <span>Description <em>optional</em></span>
+                    <input type="text" id="meeting-modal-description" maxlength="200" placeholder="What is this meeting about?" autocomplete="off">
+                </label>
+                <div class="stacked-form__row">
+                    <label class="stacked-form__field">
+                        <span>Team</span>
+                        <select id="meeting-modal-team"></select>
+                    </label>
+                    <label class="stacked-form__field">
+                        <span>Date &amp; time</span>
+                        <input type="datetime-local" id="meeting-modal-time">
+                    </label>
+                </div>
+                <label class="toggle-row">
+                    <input type="checkbox" id="meeting-modal-auto-join" checked>
+                    <span class="toggle-row__copy">
+                        <strong>Join immediately</strong>
+                        <small>Open the room as soon as it is created.</small>
+                    </span>
+                </label>
+
+                <p class="form-error" id="meeting-modal-error" role="alert"></p>
+
+                <div class="stacked-form__actions">
+                    <button class="secondary-button" id="meeting-modal-cancel" type="button">Cancel</button>
+                    <button class="primary-button" type="submit">Create meeting</button>
                 </div>
             </form>
         </div>
