@@ -1,4 +1,5 @@
 node_modules/
 vyom.sqlite
 data/*.sqlite
+data/recordings/
 .env

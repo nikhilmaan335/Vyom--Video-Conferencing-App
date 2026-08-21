@@ -16,11 +16,16 @@
         </div>
 
         <div class="meeting-header-actions">
+            <span id="meeting-recording-indicator" class="meeting-recording-indicator is-hidden" role="status">
+                <span class="meeting-recording-dot" aria-hidden="true"></span>
+                <strong>REC</strong>
+                <span id="meeting-recording-timer">00:00</span>
+            </span>
             <button id="meeting-hands-chip" class="meeting-hands-chip is-hidden" type="button" title="Raised hands" aria-label="Raised hands">
                 <span aria-hidden="true">✋</span>
                 <strong id="meeting-hands-count">0</strong>
             </button>
-            <button id="meeting-copy-link-button" class="secondary-button meeting-header-button" type="button">Copy Link</button>
+            <button id="meeting-copy-link-button" class="secondary-button meeting-header-button" type="button">Share</button>
             <button id="meeting-fullscreen-button" class="icon-button meeting-header-button" type="button" aria-label="Toggle fullscreen">⛶</button>
             <span class="meeting-timer" id="meeting-timer">45:12</span>
             <button id="theme-toggle" class="theme-toggle-button" type="button" aria-label="Toggle dark mode">🌙</button>
@@ -84,6 +89,7 @@
                 <div class="captions-toolbar">
                     <label>Speech language
                         <select id="captions-language-select">
+                            <option value="auto" selected>Auto detect</option>
                             <option value="en-US">English</option>
                             <option value="hi-IN">Hindi</option>
                             <option value="es-ES">Spanish</option>
@@ -103,6 +109,7 @@
                     </label>
                 </div>
                 <div id="captions-overlay" class="captions-output"></div>
+                <p id="captions-detected-language" class="captions-detected" aria-live="polite"></p>
                 <div id="captions-translation" class="captions-output captions-output--translation" aria-live="polite"></div>
             </div>
         </aside>
@@ -179,6 +186,14 @@
                             <strong>Captions</strong>
                             <span>Live Transcription</span>
                         </button>
+                        <button class="tool-card" id="record-meeting-button" type="button">
+                            <strong>Record</strong>
+                            <span id="record-meeting-hint">Save to your history</span>
+                        </button>
+                        <button class="tool-card" id="share-invite-button" type="button">
+                            <strong>Share invite</strong>
+                            <span>Copy link or send it</span>
+                        </button>
                         <button class="tool-card" id="download-attendance-button" type="button" style="display: none;">
                             <strong>Attendance</strong>
                             <span>Download CSV</span>
@@ -187,6 +202,45 @@
                             <strong>AI suggestions</strong>
                             <span>Get smart next steps</span>
                         </button>
+                    </div>
+                </div>
+                <div class="drawer-section is-hidden" id="host-controls-section">
+                    <h3>Host controls</h3>
+                    <p class="drawer-section__note">Applies to everyone who joins this room.</p>
+                    <div class="host-control-list">
+                        <label class="host-control-toggle">
+                            <input type="checkbox" id="host-setting-mute-on-entry">
+                            <span>Mute participants on entry</span>
+                        </label>
+                        <label class="host-control-toggle">
+                            <input type="checkbox" id="host-setting-video-off-on-entry">
+                            <span>Turn off video on entry</span>
+                        </label>
+                        <label class="host-control-toggle">
+                            <input type="checkbox" id="host-setting-allow-unmute">
+                            <span>Allow participants to unmute</span>
+                        </label>
+                        <label class="host-control-toggle">
+                            <input type="checkbox" id="host-setting-allow-video">
+                            <span>Allow participants to start video</span>
+                        </label>
+                        <label class="host-control-toggle">
+                            <input type="checkbox" id="host-setting-allow-screen-share">
+                            <span>Allow participants to share screen</span>
+                        </label>
+                        <label class="host-control-toggle">
+                            <input type="checkbox" id="host-setting-allow-chat">
+                            <span>Allow participants to chat</span>
+                        </label>
+                        <label class="host-control-toggle">
+                            <input type="checkbox" id="host-setting-allow-recording">
+                            <span>Allow participants to record</span>
+                        </label>
+                    </div>
+                    <div class="host-control-actions">
+                        <button class="secondary-button" id="host-mute-all-button" type="button">Mute everyone</button>
+                        <button class="secondary-button" id="host-video-off-all-button" type="button">Stop everyone's video</button>
+                        <button class="secondary-button" id="host-lower-hands-button" type="button">Lower all hands</button>
                     </div>
                 </div>
                 <div class="drawer-section">
@@ -268,6 +322,85 @@
             </button>
         </section>
     </main>
+
+    <div class="social-auth-modal is-hidden share-modal" id="share-modal" aria-hidden="true">
+        <div class="social-auth-modal__card share-modal__card" role="dialog" aria-modal="true" aria-labelledby="share-modal-title">
+            <button class="social-auth-modal__close" id="share-modal-close" type="button" aria-label="Close share options">✕</button>
+            <div class="social-auth-modal__header">
+                <p class="social-auth-modal__eyebrow">Invite people</p>
+                <h2 id="share-modal-title">Share this meeting</h2>
+                <p>Anyone with the link and a Vyom account can join this room.</p>
+            </div>
+
+            <div class="share-field">
+                <label for="share-link-input">Meeting link</label>
+                <div class="share-field__row">
+                    <input type="text" id="share-link-input" readonly>
+                    <button class="primary-button" id="share-copy-link-button" type="button">Copy</button>
+                </div>
+            </div>
+
+            <div class="share-field">
+                <label for="share-code-input">Meeting code</label>
+                <div class="share-field__row">
+                    <input type="text" id="share-code-input" readonly>
+                    <button class="secondary-button" id="share-copy-code-button" type="button">Copy</button>
+                </div>
+            </div>
+
+            <div class="share-field">
+                <label>Send with</label>
+                <div class="share-target-grid">
+                    <a class="share-target" id="share-target-whatsapp" href="#" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">💬</span>WhatsApp</a>
+                    <a class="share-target" id="share-target-telegram" href="#" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">✈️</span>Telegram</a>
+                    <a class="share-target" id="share-target-email" href="#"><span aria-hidden="true">✉️</span>Email</a>
+                    <a class="share-target" id="share-target-x" href="#" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">𝕏</span>Post</a>
+                    <button class="share-target is-hidden" id="share-target-native" type="button"><span aria-hidden="true">📤</span>More apps</button>
+                </div>
+            </div>
+
+            <p class="share-modal__status" id="share-modal-status" aria-live="polite"></p>
+        </div>
+    </div>
+
+    <div class="social-auth-modal is-hidden poll-modal" id="poll-modal" aria-hidden="true">
+        <div class="social-auth-modal__card poll-modal__card" role="dialog" aria-modal="true" aria-labelledby="poll-modal-title">
+            <button class="social-auth-modal__close" id="poll-modal-close" type="button" aria-label="Close poll composer">✕</button>
+            <div class="social-auth-modal__header">
+                <p class="social-auth-modal__eyebrow">Live poll</p>
+                <h2 id="poll-modal-title">Create a poll</h2>
+                <p>Ask the room a question and collect answers in real time.</p>
+            </div>
+
+            <form class="poll-form" id="poll-form" novalidate>
+                <label class="poll-form__label" for="poll-question">Question</label>
+                <input type="text" id="poll-question" maxlength="200" placeholder="What should we tackle first?" autocomplete="off">
+
+                <label class="poll-form__label">Options</label>
+                <div class="poll-option-inputs" id="poll-option-inputs"></div>
+                <button class="secondary-button poll-add-option" id="poll-add-option" type="button">+ Add option</button>
+
+                <label class="poll-form__label">Answer type</label>
+                <div class="poll-mode-switch" role="radiogroup" aria-label="Answer type">
+                    <label class="poll-mode-switch__item">
+                        <input type="radio" name="poll-selection-mode" value="single" checked>
+                        <span>Single choice</span>
+                    </label>
+                    <label class="poll-mode-switch__item">
+                        <input type="radio" name="poll-selection-mode" value="multi">
+                        <span>Multiple choice</span>
+                    </label>
+                </div>
+
+                <p class="form-error" id="poll-form-error" role="alert"></p>
+
+                <div class="poll-form__actions">
+                    <button class="secondary-button" id="poll-cancel-button" type="button">Cancel</button>
+                    <button class="primary-button" type="submit">Launch poll</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/selfie_segmentation.js" crossorigin="anonymous"></script>

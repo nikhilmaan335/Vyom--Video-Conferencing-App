@@ -147,6 +147,20 @@ async function getDatabase() {
                     FOREIGN KEY (meeting_id) REFERENCES meetings (id) ON DELETE CASCADE,
                     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS recordings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    meeting_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    file_name TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    mime_type TEXT NOT NULL DEFAULT 'video/webm',
+                    size_bytes INTEGER NOT NULL DEFAULT 0,
+                    duration_seconds INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (meeting_id) REFERENCES meetings (id) ON DELETE CASCADE,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                );
             `);
             await ensureUsersProfileColumns(db);
             return db;
@@ -934,6 +948,112 @@ async function updateMeetingChatMessage(roomCode, messageId, message) {
     };
 }
 
+function mapRecordingRow(row) {
+    if (!row) {
+        return null;
+    }
+
+    return {
+        id: row.id,
+        meetingId: row.meeting_id,
+        userId: row.user_id,
+        fileName: row.file_name,
+        displayName: row.display_name,
+        mimeType: row.mime_type,
+        sizeBytes: row.size_bytes,
+        durationSeconds: row.duration_seconds,
+        createdAt: row.created_at,
+        meetingTitle: row.meeting_title,
+        roomCode: row.room_code,
+        hostUserId: row.host_user_id
+    };
+}
+
+async function createRecording({ roomCode, userId, fileName, displayName, mimeType, sizeBytes, durationSeconds }) {
+    const db = await getDatabase();
+    const meeting = await db.get('SELECT * FROM meetings WHERE room_code = ?', [roomCode]);
+    if (!meeting) {
+        const error = new Error('Meeting not found.');
+        error.status = 404;
+        throw error;
+    }
+
+    const result = await db.run(
+        `
+            INSERT INTO recordings (
+                meeting_id,
+                user_id,
+                file_name,
+                display_name,
+                mime_type,
+                size_bytes,
+                duration_seconds
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+            meeting.id,
+            userId,
+            fileName,
+            displayName,
+            mimeType || 'video/webm',
+            Number(sizeBytes) || 0,
+            Number(durationSeconds) || 0
+        ]
+    );
+
+    return getRecordingById(result.lastID);
+}
+
+async function getRecordingById(recordingId) {
+    const db = await getDatabase();
+    const row = await db.get(
+        `
+            SELECT recordings.*, meetings.title AS meeting_title, meetings.room_code, meetings.host_user_id
+            FROM recordings
+            JOIN meetings ON meetings.id = recordings.meeting_id
+            WHERE recordings.id = ?
+        `,
+        [recordingId]
+    );
+
+    return mapRecordingRow(row);
+}
+
+async function getRecordingsForUser(userId) {
+    const db = await getDatabase();
+    const rows = await db.all(
+        `
+            SELECT recordings.*, meetings.title AS meeting_title, meetings.room_code, meetings.host_user_id
+            FROM recordings
+            JOIN meetings ON meetings.id = recordings.meeting_id
+            WHERE recordings.user_id = ? OR meetings.host_user_id = ?
+            ORDER BY recordings.created_at DESC, recordings.id DESC
+        `,
+        [userId, userId]
+    );
+
+    return rows.map(mapRecordingRow);
+}
+
+async function deleteRecording(recordingId, userId) {
+    const recording = await getRecordingById(recordingId);
+    if (!recording) {
+        const error = new Error('Recording not found.');
+        error.status = 404;
+        throw error;
+    }
+
+    if (recording.userId !== userId && recording.hostUserId !== userId) {
+        const error = new Error('You cannot delete this recording.');
+        error.status = 403;
+        throw error;
+    }
+
+    const db = await getDatabase();
+    await db.run('DELETE FROM recordings WHERE id = ?', [recordingId]);
+    return recording;
+}
+
 module.exports = {
     getDatabase,
     normalizeEmail,
@@ -954,5 +1074,9 @@ module.exports = {
     endMeeting,
     getMeetingChatMessages,
     saveMeetingChatMessage,
-    updateMeetingChatMessage
+    updateMeetingChatMessage,
+    createRecording,
+    getRecordingById,
+    getRecordingsForUser,
+    deleteRecording
 };

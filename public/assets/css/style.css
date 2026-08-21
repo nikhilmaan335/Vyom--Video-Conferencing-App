@@ -2338,6 +2338,16 @@ footer {
     background: rgba(239, 68, 68, 0.12);
 }
 
+.tool-card.is-active {
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.18);
+}
+
+.tool-card:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .ai-suggestions-list {
     display: grid;
     gap: 10px;
@@ -2875,49 +2885,508 @@ footer {
     border-left: 3px solid var(--accent-color, #5b6cff);
 }
 
-.chat-message__poll-mode,
-.poll-voters {
-    display: block;
-    margin-top: 6px;
-    color: var(--text-secondary, #64748b);
-    font-size: 12px;
+/* Poll card */
+.chat-message--poll {
+    max-width: 100%;
+}
+
+.poll-card {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(155deg, rgba(91, 108, 255, 0.18), rgba(255, 255, 255, 0.05));
+    color: #fff;
+}
+
+.poll-card.is-closed {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.poll-card__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.poll-card__badge {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.poll-card__mode,
+.poll-card__count {
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+.poll-card__count {
+    margin-left: auto;
+}
+
+.poll-card__question {
+    margin: 0;
+    font-size: 15.5px;
+    font-weight: 700;
+    line-height: 1.35;
 }
 
 .poll-options {
     display: grid;
-    gap: 7px;
-    margin-top: 10px;
+    gap: 8px;
 }
 
 .poll-option {
+    display: grid;
+    gap: 8px;
+    padding: 11px 13px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.poll-option:hover:not(.is-disabled) {
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+.poll-option.is-selected {
+    border-color: var(--accent);
+    background: rgba(91, 108, 255, 0.24);
+}
+
+.poll-option.is-disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+}
+
+.poll-option__control {
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: 36px;
-    padding: 7px 9px;
-    border: 1px solid var(--border-color, #dbe2ea);
-    border-radius: 8px;
-    cursor: pointer;
+    gap: 10px;
 }
 
-.poll-option span:nth-child(2) {
+.poll-option__control input {
+    flex: none;
+    width: 17px;
+    height: 17px;
+    accent-color: var(--accent);
+}
+
+.poll-option__label {
     flex: 1;
+    font-size: 13.5px;
+    line-height: 1.4;
+    word-break: break-word;
 }
 
-.poll-vote-button {
-    justify-content: center;
+.poll-option__result {
+    display: grid;
+    gap: 5px;
+}
+
+.poll-option__bar {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    overflow: hidden;
+}
+
+.poll-option__bar span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-secondary));
+    transition: width 0.4s ease;
+}
+
+.poll-option__numbers {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.poll-option__numbers strong {
+    font-size: 13px;
+    color: #fff;
+}
+
+.poll-card__status {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.poll-card__status.is-voted {
+    color: var(--success);
+}
+
+.poll-card__status.is-closed {
+    color: rgba(255, 255, 255, 0.62);
 }
 
 .poll-voters {
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 12.5px;
+}
+
+.poll-voters summary {
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.74);
+    font-weight: 600;
+}
+
+.poll-voters__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 7px;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.poll-voters__row span {
+    color: rgba(255, 255, 255, 0.6);
+    text-align: right;
+}
+
+.poll-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.poll-card__actions button {
+    flex: 1 1 auto;
+    justify-content: center;
+}
+
+/* Poll composer modal */
+.poll-modal__card {
+    max-width: 520px;
+}
+
+.poll-form {
     display: grid;
-    gap: 4px;
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border-color, #dbe2ea);
+    gap: 8px;
+}
+
+.poll-form__label {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.poll-form input[type="text"] {
+    width: 100%;
+    padding: 11px 13px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+}
+
+.poll-option-inputs {
+    display: grid;
+    gap: 8px;
+}
+
+.poll-option-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.poll-option-input input {
+    flex: 1;
+    min-width: 0;
+}
+
+.poll-option-input button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.poll-add-option {
+    justify-self: start;
+}
+
+.poll-mode-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.poll-mode-switch__item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 13px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.poll-mode-switch__item:has(input:checked) {
+    border-color: var(--accent);
+    background: rgba(91, 108, 255, 0.12);
+    color: var(--accent);
+}
+
+.poll-mode-switch__item input {
+    accent-color: var(--accent);
+}
+
+.poll-form__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 8px;
 }
 
 @media (max-width: 520px) {
     .captions-toolbar {
         grid-template-columns: 1fr;
     }
+}
+
+/* Inline form validation */
+.field-error,
+.form-error {
+    display: none;
+    margin: 4px 0 0;
+    color: var(--danger);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.field-error.is-visible,
+.form-error.is-visible {
+    display: block;
+}
+
+.form-error.is-visible {
+    padding: 9px 12px;
+    border: 1px solid var(--danger);
+    border-radius: 10px;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+input.is-invalid,
+select.is-invalid,
+textarea.is-invalid {
+    border-color: var(--danger) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.16);
+}
+
+/* Recording indicator */
+.meeting-recording-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: rgba(239, 68, 68, 0.14);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+}
+
+.meeting-recording-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--danger);
+    animation: vyom-recording-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes vyom-recording-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+}
+
+/* Host controls */
+.drawer-section__note {
+    margin: 0 0 10px;
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 12.5px;
+}
+
+.host-control-list {
+    display: grid;
+    gap: 8px;
+}
+
+.host-control-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+
+.host-control-toggle input {
+    accent-color: var(--accent);
+}
+
+.host-control-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.participant-row__host-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: 6px;
+}
+
+.chat-composer.is-locked {
+    opacity: 0.55;
+}
+
+/* Share modal */
+.share-modal__card {
+    max-width: 520px;
+    display: grid;
+    gap: 16px;
+}
+
+.share-field {
+    display: grid;
+    gap: 6px;
+}
+
+.share-field label {
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.share-field__row {
+    display: flex;
+    gap: 8px;
+}
+
+.share-field__row input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13.5px;
+}
+
+.share-target-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 8px;
+}
+
+.share-target {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13.5px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.share-target:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.share-modal__status {
+    margin: 0;
+    min-height: 18px;
+    color: var(--success);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* Meeting toast */
+.meeting-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 110px;
+    z-index: 1200;
+    transform: translate(-50%, 16px);
+    max-width: min(420px, 88vw);
+    padding: 11px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13.5px;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.22);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.meeting-toast.is-visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.captions-detected {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+/* Dashboard recordings */
+.recordings-panel {
+    margin-top: 20px;
+}
+
+.recording-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.recording-actions a.secondary-button {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
 }

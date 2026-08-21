@@ -22,7 +22,11 @@ const {
     endMeeting,
     getMeetingChatMessages,
     saveMeetingChatMessage,
-    updateMeetingChatMessage
+    updateMeetingChatMessage,
+    createRecording,
+    getRecordingById,
+    getRecordingsForUser,
+    deleteRecording
 } = require('../database');
 
 const app = express();
@@ -70,7 +74,20 @@ loadEnvFile(path.join(__dirname, '../../.env'));
 const PORT = process.env.PORT || 3000;
 const roomPresence = new Map();
 const roomWhiteboards = new Map();
+const roomSettings = new Map();
 const oauthStateStore = new Map();
+const RECORDINGS_DIRECTORY = path.join(__dirname, '../../data/recordings');
+const MAX_RECORDING_BYTES = 512 * 1024 * 1024;
+
+const DEFAULT_ROOM_SETTINGS = {
+    muteOnEntry: true,
+    videoOffOnEntry: true,
+    allowParticipantUnmute: true,
+    allowParticipantVideo: true,
+    allowParticipantScreenShare: true,
+    allowParticipantChat: true,
+    allowParticipantRecording: false
+};
 
 const oauthProviders = {
     google: {
@@ -615,6 +632,58 @@ app.get('/auth/oauth/:provider/callback', async (req, res) => {
     }
 });
 
+const POLL_MESSAGE_PREFIX = '[POLL]: ';
+
+function parsePollMessage(message) {
+    if (typeof message !== 'string' || !message.startsWith(POLL_MESSAGE_PREFIX)) {
+        return null;
+    }
+
+    try {
+        const poll = JSON.parse(message.slice(POLL_MESSAGE_PREFIX.length));
+        return poll && typeof poll === 'object' ? poll : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function serializePoll(poll) {
+    return `${POLL_MESSAGE_PREFIX}${JSON.stringify(poll)}`;
+}
+
+// Rebuilds an incoming poll from scratch so clients can never inject vote counts or voters.
+function normalizeNewPoll(rawPoll, createdBy) {
+    const question = String(rawPoll?.question || '').trim().slice(0, 200);
+    if (!question) {
+        const error = new Error('A poll question is required.');
+        error.status = 400;
+        throw error;
+    }
+
+    const options = (Array.isArray(rawPoll?.options) ? rawPoll.options : [])
+        .map((option) => String(option || '').trim().slice(0, 100))
+        .filter(Boolean)
+        .slice(0, 8);
+
+    if (options.length < 2) {
+        const error = new Error('A poll needs at least two options.');
+        error.status = 400;
+        throw error;
+    }
+
+    return {
+        type: 'poll',
+        question,
+        options,
+        selectionMode: rawPoll?.selectionMode === 'multi' ? 'multi' : 'single',
+        votes: options.map(() => 0),
+        voters: [],
+        closed: false,
+        createdBy,
+        createdAt: new Date().toISOString()
+    };
+}
+
 function extractToken(req) {
     const authHeader = req.headers.authorization || '';
     if (authHeader.toLowerCase().startsWith('bearer ')) {
@@ -726,6 +795,32 @@ function getRoomWhiteboardState(roomCode) {
     }
 
     return roomWhiteboards.get(roomCode);
+}
+
+function getRoomSettings(roomCode) {
+    if (!roomSettings.has(roomCode)) {
+        roomSettings.set(roomCode, { ...DEFAULT_ROOM_SETTINGS });
+    }
+
+    return roomSettings.get(roomCode);
+}
+
+function updateRoomSettings(roomCode, patch = {}) {
+    const settings = getRoomSettings(roomCode);
+    for (const key of Object.keys(DEFAULT_ROOM_SETTINGS)) {
+        if (typeof patch[key] === 'boolean') {
+            settings[key] = patch[key];
+        }
+    }
+
+    return settings;
+}
+
+function broadcastRoomSettings(roomCode) {
+    io.to(roomCode).emit('meeting:room-settings', {
+        roomCode,
+        settings: getRoomSettings(roomCode)
+    });
 }
 
 function broadcastWhiteboardState(roomCode) {
@@ -931,6 +1026,112 @@ app.post('/api/meetings/:roomCode/end', requireAuth, async (req, res, next) => {
     }
 });
 
+const RECORDING_MIME_TYPES = new Set(['video/webm', 'video/mp4', 'audio/webm']);
+
+function recordingExtensionFor(mimeType) {
+    if (mimeType === 'video/mp4') {
+        return '.mp4';
+    }
+
+    return mimeType === 'audio/webm' ? '.weba' : '.webm';
+}
+
+function sanitizeRecordingLabel(value, fallback) {
+    const label = String(value || '').replace(/[^\w\s.-]/g, '').trim().slice(0, 80);
+    return label || fallback;
+}
+
+app.post(
+    '/api/meetings/:roomCode/recordings',
+    requireAuth,
+    express.raw({ type: () => true, limit: MAX_RECORDING_BYTES }),
+    async (req, res, next) => {
+        try {
+            const mimeType = String(req.headers['content-type'] || '').split(';')[0].trim();
+            if (!RECORDING_MIME_TYPES.has(mimeType)) {
+                return res.status(415).json({ message: 'Unsupported recording format.' });
+            }
+
+            if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+                return res.status(400).json({ message: 'Recording file is empty.' });
+            }
+
+            const meeting = await getMeetingByRoomCode(req.params.roomCode);
+            if (!meeting) {
+                return res.status(404).json({ message: 'Meeting not found.' });
+            }
+
+            const settings = getRoomSettings(meeting.roomCode);
+            const isHost = meeting.hostUserId === req.user.id;
+            if (!isHost && !settings.allowParticipantRecording) {
+                return res.status(403).json({ message: 'Only the host can save recordings for this meeting.' });
+            }
+
+            await fs.promises.mkdir(RECORDINGS_DIRECTORY, { recursive: true });
+
+            const fileName = `${crypto.randomBytes(16).toString('hex')}${recordingExtensionFor(mimeType)}`;
+            await fs.promises.writeFile(path.join(RECORDINGS_DIRECTORY, fileName), req.body);
+
+            const recording = await createRecording({
+                roomCode: meeting.roomCode,
+                userId: req.user.id,
+                fileName,
+                displayName: sanitizeRecordingLabel(req.headers['x-vyom-recording-name'], meeting.title),
+                mimeType,
+                sizeBytes: req.body.length,
+                durationSeconds: Number(req.headers['x-vyom-recording-duration']) || 0
+            });
+
+            return res.status(201).json({ recording });
+        } catch (error) {
+            return next(error);
+        }
+    }
+);
+
+app.get('/api/recordings', requireAuth, async (req, res, next) => {
+    try {
+        const recordings = await getRecordingsForUser(req.user.id);
+        return res.json({ recordings });
+    } catch (error) {
+        return next(error);
+    }
+});
+
+app.get('/api/recordings/:id/download', requireAuth, async (req, res, next) => {
+    try {
+        const recording = await getRecordingById(Number(req.params.id));
+        if (!recording) {
+            return res.status(404).json({ message: 'Recording not found.' });
+        }
+
+        if (recording.userId !== req.user.id && recording.hostUserId !== req.user.id) {
+            return res.status(403).json({ message: 'You cannot access this recording.' });
+        }
+
+        const absolutePath = path.join(RECORDINGS_DIRECTORY, path.basename(recording.fileName));
+        if (!fs.existsSync(absolutePath)) {
+            return res.status(404).json({ message: 'Recording file is no longer available.' });
+        }
+
+        res.setHeader('Content-Type', recording.mimeType);
+        return res.download(absolutePath, `${sanitizeRecordingLabel(recording.displayName, 'vyom-recording')}${recordingExtensionFor(recording.mimeType)}`);
+    } catch (error) {
+        return next(error);
+    }
+});
+
+app.delete('/api/recordings/:id', requireAuth, async (req, res, next) => {
+    try {
+        const recording = await deleteRecording(Number(req.params.id), req.user.id);
+        const absolutePath = path.join(RECORDINGS_DIRECTORY, path.basename(recording.fileName));
+        await fs.promises.rm(absolutePath, { force: true });
+        return res.json({ success: true });
+    } catch (error) {
+        return next(error);
+    }
+});
+
 app.use(express.static(path.join(__dirname, '../../public'), { extensions: ['html'] }));
 
 app.use((error, req, res, next) => {
@@ -969,20 +1170,37 @@ io.on('connection', (socket) => {
             socket.join(roomCode);
             socket.data.joinedRooms.add(roomCode);
             socket.data.currentRoomCode = roomCode;
+            const isHost = meeting.hostUserId === socket.user.id;
+            const settings = getRoomSettings(roomCode);
+            const entryAudioEnabled = isHost ? true : !settings.muteOnEntry;
+            const entryVideoEnabled = isHost ? true : !settings.videoOffOnEntry;
             const presence = getRoomPresenceMap(roomCode);
             presence.set(socket.id, {
                 socketId: socket.id,
                 userId: socket.user.id,
                 name: socket.user.name,
                 email: socket.user.email,
-                audioEnabled: true,
-                videoEnabled: true,
+                audioEnabled: entryAudioEnabled,
+                videoEnabled: entryVideoEnabled,
                 handRaised: false,
-                isHost: meeting.hostUserId === socket.user.id,
+                isHost,
                 joinedAt: new Date().toISOString()
             });
+            await updateParticipantState(roomCode, socket.user.id, {
+                audioEnabled: entryAudioEnabled,
+                videoEnabled: entryVideoEnabled
+            });
             broadcastRoomParticipants(roomCode);
-            socket.emit('meeting:joined', formatMeetingState(meeting));
+            socket.emit('meeting:joined', {
+                ...formatMeetingState(meeting),
+                isHost,
+                settings,
+                entryState: {
+                    audioEnabled: entryAudioEnabled,
+                    videoEnabled: entryVideoEnabled
+                }
+            });
+            socket.emit('meeting:room-settings', { roomCode, settings });
             socket.emit('meeting:chat-history', {
                 roomCode,
                 messages: await getMeetingChatMessages(roomCode)
@@ -994,6 +1212,69 @@ io.on('connection', (socket) => {
             sendMeetingState(io, meeting);
         } catch (error) {
             socket.emit('meeting:error', error.message || 'Unable to join meeting.');
+        }
+    });
+
+    socket.on('meeting:update-room-settings', async ({ roomCode, settings }) => {
+        try {
+            if (!roomCode) {
+                throw new Error('A meeting room code is required.');
+            }
+
+            const meeting = await getMeetingByRoomCode(roomCode);
+            if (!meeting) {
+                throw new Error('Meeting not found.');
+            }
+
+            if (meeting.hostUserId !== socket.user.id) {
+                throw new Error('Only the host can change meeting options.');
+            }
+
+            updateRoomSettings(roomCode, settings || {});
+            broadcastRoomSettings(roomCode);
+        } catch (error) {
+            socket.emit('meeting:error', error.message || 'Unable to update meeting options.');
+        }
+    });
+
+    socket.on('meeting:host-command', async ({ roomCode, targetSocketId, action }) => {
+        try {
+            if (!roomCode || !action) {
+                throw new Error('A meeting room code and action are required.');
+            }
+
+            const meeting = await getMeetingByRoomCode(roomCode);
+            if (!meeting) {
+                throw new Error('Meeting not found.');
+            }
+
+            if (meeting.hostUserId !== socket.user.id) {
+                throw new Error('Only the host can perform this action.');
+            }
+
+            const allowedActions = new Set(['mute', 'video-off', 'lower-hand', 'remove']);
+            if (!allowedActions.has(action)) {
+                throw new Error('Unsupported host action.');
+            }
+
+            const presence = getRoomPresenceMap(roomCode);
+            const targets = targetSocketId
+                ? [presence.get(targetSocketId)].filter(Boolean)
+                : [...presence.values()].filter((participant) => !participant.isHost);
+
+            if (!targets.length) {
+                return;
+            }
+
+            for (const target of targets) {
+                io.to(target.socketId).emit('meeting:host-action', {
+                    roomCode,
+                    action,
+                    hostName: socket.user.name
+                });
+            }
+        } catch (error) {
+            socket.emit('meeting:error', error.message || 'Unable to apply host action.');
         }
     });
 
@@ -1035,6 +1316,7 @@ io.on('connection', (socket) => {
                 presence.delete(socket.id);
                 if (presence.size === 0) {
                     roomPresence.delete(roomCode);
+                    roomSettings.delete(roomCode);
                 } else {
                     broadcastRoomParticipants(roomCode);
                 }
@@ -1099,7 +1381,12 @@ io.on('connection', (socket) => {
                 throw new Error('A meeting room code is required.');
             }
 
-            const savedMessage = await saveMeetingChatMessage(roomCode, socket.user.id, message);
+            const incomingPoll = parsePollMessage(message);
+            const content = incomingPoll
+                ? serializePoll(normalizeNewPoll(incomingPoll, socket.user.id))
+                : message;
+
+            const savedMessage = await saveMeetingChatMessage(roomCode, socket.user.id, content);
             io.to(roomCode).emit('meeting:chat-message', {
                 roomCode,
                 message: savedMessage
@@ -1122,11 +1409,15 @@ io.on('connection', (socket) => {
 
             const chatMessages = await getMeetingChatMessages(roomCode);
             const pollMessage = chatMessages.find((item) => item.id === Number(messageId));
-            if (!pollMessage || !pollMessage.message.startsWith('[POLL]: ')) {
+            const poll = pollMessage ? parsePollMessage(pollMessage.message) : null;
+            if (!poll) {
                 throw new Error('Poll not found.');
             }
 
-            const poll = JSON.parse(pollMessage.message.slice(8));
+            if (poll.closed) {
+                throw new Error('This poll is closed.');
+            }
+
             const normalizedSelections = [...new Set(selections.map(Number))]
                 .filter((index) => Number.isInteger(index) && index >= 0 && index < poll.options.length);
             if (!normalizedSelections.length) {
@@ -1156,14 +1447,41 @@ io.on('connection', (socket) => {
                 votedAt: new Date().toISOString()
             });
 
-            const updatedMessage = await updateMeetingChatMessage(
-                roomCode,
-                Number(messageId),
-                `[POLL]: ${JSON.stringify(poll)}`
-            );
+            const updatedMessage = await updateMeetingChatMessage(roomCode, Number(messageId), serializePoll(poll));
             io.to(roomCode).emit('meeting:chat-message', { roomCode, message: updatedMessage, replace: true });
         } catch (error) {
             socket.emit('meeting:error', error.message || 'Unable to record poll vote.');
+        }
+    });
+
+    socket.on('meeting:poll-close', async ({ roomCode, messageId, closed = true }) => {
+        try {
+            if (!roomCode || !messageId) {
+                throw new Error('A poll is required.');
+            }
+
+            const meeting = await getMeetingByRoomCode(roomCode);
+            if (!meeting) {
+                throw new Error('Meeting not found.');
+            }
+
+            const chatMessages = await getMeetingChatMessages(roomCode);
+            const pollMessage = chatMessages.find((item) => item.id === Number(messageId));
+            const poll = pollMessage ? parsePollMessage(pollMessage.message) : null;
+            if (!poll) {
+                throw new Error('Poll not found.');
+            }
+
+            const isPollOwner = poll.createdBy === socket.user.id || pollMessage.author.id === socket.user.id;
+            if (meeting.hostUserId !== socket.user.id && !isPollOwner) {
+                throw new Error('Only the host can close this poll.');
+            }
+
+            poll.closed = Boolean(closed);
+            const updatedMessage = await updateMeetingChatMessage(roomCode, Number(messageId), serializePoll(poll));
+            io.to(roomCode).emit('meeting:chat-message', { roomCode, message: updatedMessage, replace: true });
+        } catch (error) {
+            socket.emit('meeting:error', error.message || 'Unable to update the poll.');
         }
     });
 
@@ -1177,6 +1495,7 @@ io.on('connection', (socket) => {
                     presence.delete(socket.id);
                     if (presence.size === 0) {
                         roomPresence.delete(roomCode);
+                        roomSettings.delete(roomCode);
                     } else {
                         broadcastRoomParticipants(roomCode);
                     }

@@ -110,6 +110,51 @@ function formatMeetingDuration(startedAt, endedAt) {
     return `${durationMinutes} min`;
 }
 
+function formatFileSize(bytes) {
+    const size = Number(bytes) || 0;
+    if (size < 1024) {
+        return `${size} B`;
+    }
+    if (size < 1024 * 1024) {
+        return `${(size / 1024).toFixed(1)} KB`;
+    }
+    if (size < 1024 * 1024 * 1024) {
+        return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatSecondsDuration(totalSeconds) {
+    const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+    if (!seconds) {
+        return '—';
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return minutes ? `${minutes}m ${remainder}s` : `${remainder}s`;
+}
+
+let meetingToastTimer = null;
+
+function showMeetingToast(message) {
+    let toast = document.getElementById('meeting-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'meeting-toast';
+        toast.className = 'meeting-toast';
+        toast.setAttribute('role', 'status');
+        document.body.appendChild(toast);
+    }
+
+    toast.textContent = message;
+    toast.classList.add('is-visible');
+    clearTimeout(meetingToastTimer);
+    meetingToastTimer = setTimeout(() => {
+        toast.classList.remove('is-visible');
+    }, 4000);
+}
+
 let preferredSpeakerOutputDeviceId = '';
 
 async function applySpeakerOutputToElement(mediaElement) {
@@ -298,6 +343,27 @@ function openCenteredPopup(url, name) {
     return window.open(url, name, features);
 }
 
+function setFieldError(errorElementId, message, inputElement = null) {
+    const errorElement = document.getElementById(errorElementId);
+    if (errorElement) {
+        errorElement.textContent = message || '';
+        errorElement.classList.toggle('is-visible', Boolean(message));
+    }
+
+    if (inputElement) {
+        inputElement.classList.toggle('is-invalid', Boolean(message));
+        inputElement.setAttribute('aria-invalid', String(Boolean(message)));
+    }
+}
+
+function clearFormErrors(formElement, errorElementIds = []) {
+    errorElementIds.forEach((id) => setFieldError(id, ''));
+    formElement?.querySelectorAll('.is-invalid').forEach((input) => {
+        input.classList.remove('is-invalid');
+        input.removeAttribute('aria-invalid');
+    });
+}
+
 function wireAuthPage() {
     const signupForm = document.querySelector('.registration-form');
     const socialAuthModal = document.getElementById('social-auth-modal');
@@ -422,23 +488,99 @@ function wireAuthPage() {
     });
 
     if (signupForm) {
-        signupForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
+        const signupErrorIds = [
+            'signup-fname-error',
+            'signup-lname-error',
+            'signup-email-error',
+            'signup-password-error',
+            'signup-confirm-password-error',
+            'signup-terms-error',
+            'signup-form-error'
+        ];
+        const signupPasswordInput = signupForm.querySelector('input[name="password"]');
+        const signupConfirmInput = signupForm.querySelector('input[name="confirm-password"]');
 
-            const firstName = signupForm.querySelector('input[name="fname"]').value.trim();
-            const lastName = signupForm.querySelector('input[name="lname"]').value.trim();
-            const email = signupForm.querySelector('input[name="email"]').value.trim();
-            const password = signupForm.querySelector('input[name="password"]').value;
-            const confirmPassword = signupForm.querySelector('input[name="confirm-password"]')?.value;
-            const termsAccepted = signupForm.querySelector('input[name="terms"]').checked;
-
-            if (confirmPassword !== undefined && password !== confirmPassword) {
-                alert('Passwords do not match. Please try again.');
-                return;
+        const validateConfirmPassword = () => {
+            if (!signupConfirmInput || !signupPasswordInput) {
+                return true;
             }
 
-            if (!termsAccepted) {
-                alert('Please agree to the Terms and Conditions.');
+            if (!signupConfirmInput.value) {
+                setFieldError('signup-confirm-password-error', '', signupConfirmInput);
+                return false;
+            }
+
+            const matches = signupPasswordInput.value === signupConfirmInput.value;
+            setFieldError(
+                'signup-confirm-password-error',
+                matches ? '' : 'Passwords do not match.',
+                signupConfirmInput
+            );
+            return matches;
+        };
+
+        signupConfirmInput?.addEventListener('input', validateConfirmPassword);
+        signupPasswordInput?.addEventListener('input', () => {
+            if (signupConfirmInput?.value) {
+                validateConfirmPassword();
+            }
+        });
+
+        signupForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            clearFormErrors(signupForm, signupErrorIds);
+
+            const firstNameInput = signupForm.querySelector('input[name="fname"]');
+            const lastNameInput = signupForm.querySelector('input[name="lname"]');
+            const emailInput = signupForm.querySelector('input[name="email"]');
+            const termsInput = signupForm.querySelector('input[name="terms"]');
+
+            const firstName = firstNameInput.value.trim();
+            const lastName = lastNameInput.value.trim();
+            const email = emailInput.value.trim();
+            const password = signupPasswordInput.value;
+            const confirmPassword = signupConfirmInput?.value;
+
+            let isValid = true;
+
+            if (!firstName) {
+                setFieldError('signup-fname-error', 'First name is required.', firstNameInput);
+                isValid = false;
+            }
+            if (!lastName) {
+                setFieldError('signup-lname-error', 'Last name is required.', lastNameInput);
+                isValid = false;
+            }
+            if (!email) {
+                setFieldError('signup-email-error', 'Email is required.', emailInput);
+                isValid = false;
+            } else if (!emailInput.checkValidity()) {
+                setFieldError('signup-email-error', 'Enter a valid email address.', emailInput);
+                isValid = false;
+            }
+            if (!password) {
+                setFieldError('signup-password-error', 'Password is required.', signupPasswordInput);
+                isValid = false;
+            } else if (password.length < 8) {
+                setFieldError('signup-password-error', 'Password must be at least 8 characters.', signupPasswordInput);
+                isValid = false;
+            }
+            if (confirmPassword !== undefined) {
+                if (!confirmPassword) {
+                    setFieldError('signup-confirm-password-error', 'Confirm your password.', signupConfirmInput);
+                    isValid = false;
+                } else if (password !== confirmPassword) {
+                    setFieldError('signup-confirm-password-error', 'Passwords do not match.', signupConfirmInput);
+                    signupConfirmInput.focus();
+                    isValid = false;
+                }
+            }
+            if (!termsInput.checked) {
+                setFieldError('signup-terms-error', 'Please agree to the Terms and Conditions.', null);
+                isValid = false;
+            }
+
+            if (!isValid) {
                 return;
             }
 
@@ -451,10 +593,11 @@ function wireAuthPage() {
                 });
             } catch (error) {
                 if (error.message.includes('already exists')) {
-                    alert('You are already signed up! Please sign in to continue.');
-                    window.location.replace('sign-in.html');
+                    setFieldError('signup-email-error', 'This email is already registered. Please sign in instead.', emailInput);
+                    setFieldError('signup-form-error', 'You already have an account. Redirecting you to sign in...');
+                    setTimeout(() => window.location.replace('sign-in.html'), 1800);
                 } else {
-                    alert(error.message);
+                    setFieldError('signup-form-error', error.message || 'Unable to create your account.');
                 }
             }
         });
@@ -462,16 +605,42 @@ function wireAuthPage() {
 
     const signInForm = document.getElementById('sign-in-form');
     if (signInForm) {
+        const signInErrorIds = ['sign-in-email-error', 'sign-in-password-error', 'sign-in-form-error'];
+        const signInEmailInput = document.getElementById('sign-in-email');
+        const signInPasswordInput = document.getElementById('sign-in-password');
+
+        signInEmailInput?.addEventListener('input', () => setFieldError('sign-in-email-error', '', signInEmailInput));
+        signInPasswordInput?.addEventListener('input', () => setFieldError('sign-in-password-error', '', signInPasswordInput));
+
         signInForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+            clearFormErrors(signInForm, signInErrorIds);
 
-            const email = document.getElementById('sign-in-email').value.trim();
-            const password = document.getElementById('sign-in-password').value;
+            const email = signInEmailInput.value.trim();
+            const password = signInPasswordInput.value;
+
+            let isValid = true;
+            if (!email) {
+                setFieldError('sign-in-email-error', 'Email is required.', signInEmailInput);
+                isValid = false;
+            } else if (!signInEmailInput.checkValidity()) {
+                setFieldError('sign-in-email-error', 'Enter a valid email address.', signInEmailInput);
+                isValid = false;
+            }
+            if (!password) {
+                setFieldError('sign-in-password-error', 'Password is required.', signInPasswordInput);
+                isValid = false;
+            }
+
+            if (!isValid) {
+                return;
+            }
 
             try {
                 await submitAuthForm('/api/auth/login', { email, password });
             } catch (error) {
-                alert(error.message || 'Invalid credentials. Please try again.');
+                setFieldError('sign-in-form-error', error.message || 'Invalid credentials. Please try again.');
+                setFieldError('sign-in-password-error', 'Check your password and try again.', signInPasswordInput);
             }
         });
     }
@@ -653,6 +822,53 @@ function renderMeetingHistory(rows) {
 }
 
 
+
+function buildRecordingDownloadUrl(recordingId) {
+    const token = getStoredToken();
+    return buildBackendUrl(`/api/recordings/${encodeURIComponent(recordingId)}/download?token=${encodeURIComponent(token || '')}`);
+}
+
+function renderRecordingRows(rows, bodyElement, onDelete) {
+    if (!bodyElement) {
+        return;
+    }
+
+    if (!rows.length) {
+        bodyElement.innerHTML = '<tr><td colspan="6">No recordings yet. Use “Record” in a meeting’s More menu.</td></tr>';
+        return;
+    }
+
+    bodyElement.innerHTML = rows
+        .map((recording) => `
+            <tr>
+                <td>${escapeHtml(recording.displayName)}</td>
+                <td>${escapeHtml(recording.meetingTitle || recording.roomCode)}</td>
+                <td>${formatDateTime(recording.createdAt)}</td>
+                <td>${formatSecondsDuration(recording.durationSeconds)}</td>
+                <td>${formatFileSize(recording.sizeBytes)}</td>
+                <td class="recording-actions">
+                    <a class="secondary-button small-button" href="${escapeHtml(buildRecordingDownloadUrl(recording.id))}" download>Download</a>
+                    <button class="icon-button small-button" type="button" data-recording-delete="${escapeHtml(recording.id)}" aria-label="Delete recording">🗑️</button>
+                </td>
+            </tr>
+        `)
+        .join('');
+
+    bodyElement.querySelectorAll('[data-recording-delete]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            if (!window.confirm('Delete this recording permanently?')) {
+                return;
+            }
+
+            try {
+                await requestJson(`/api/recordings/${encodeURIComponent(button.dataset.recordingDelete)}`, { method: 'DELETE' });
+                await onDelete?.();
+            } catch (error) {
+                alert(error.message || 'Unable to delete the recording.');
+            }
+        });
+    });
+}
 
 function getParticipantKey(participant) {
     return participant.socketId || participant.userId || participant.email || participant.name;
@@ -894,6 +1110,40 @@ async function loadMeetingPage(user) {
     const screenShareButton = document.getElementById('screen-share-button');
     const raiseHandButton = document.getElementById('raise-hand-button');
     const leaveMeetingButton = document.getElementById('leave-meeting-button');
+    const recordMeetingButton = document.getElementById('record-meeting-button');
+    const recordMeetingHint = document.getElementById('record-meeting-hint');
+    const recordingIndicator = document.getElementById('meeting-recording-indicator');
+    const recordingTimerElement = document.getElementById('meeting-recording-timer');
+    const shareInviteButton = document.getElementById('share-invite-button');
+    const shareModal = document.getElementById('share-modal');
+    const shareModalClose = document.getElementById('share-modal-close');
+    const shareLinkInput = document.getElementById('share-link-input');
+    const shareCodeInput = document.getElementById('share-code-input');
+    const shareCopyLinkButton = document.getElementById('share-copy-link-button');
+    const shareCopyCodeButton = document.getElementById('share-copy-code-button');
+    const shareNativeButton = document.getElementById('share-target-native');
+    const shareModalStatus = document.getElementById('share-modal-status');
+    const captionsDetectedLanguage = document.getElementById('captions-detected-language');
+    const pollModal = document.getElementById('poll-modal');
+    const pollModalClose = document.getElementById('poll-modal-close');
+    const pollCancelButton = document.getElementById('poll-cancel-button');
+    const pollForm = document.getElementById('poll-form');
+    const pollQuestionInput = document.getElementById('poll-question');
+    const pollOptionInputs = document.getElementById('poll-option-inputs');
+    const pollAddOptionButton = document.getElementById('poll-add-option');
+    const hostControlsSection = document.getElementById('host-controls-section');
+    const hostMuteAllButton = document.getElementById('host-mute-all-button');
+    const hostVideoOffAllButton = document.getElementById('host-video-off-all-button');
+    const hostLowerHandsButton = document.getElementById('host-lower-hands-button');
+    const hostSettingInputs = {
+        muteOnEntry: document.getElementById('host-setting-mute-on-entry'),
+        videoOffOnEntry: document.getElementById('host-setting-video-off-on-entry'),
+        allowParticipantUnmute: document.getElementById('host-setting-allow-unmute'),
+        allowParticipantVideo: document.getElementById('host-setting-allow-video'),
+        allowParticipantScreenShare: document.getElementById('host-setting-allow-screen-share'),
+        allowParticipantChat: document.getElementById('host-setting-allow-chat'),
+        allowParticipantRecording: document.getElementById('host-setting-allow-recording')
+    };
 
     const remoteStreams = new Map();
     const peerConnections = new Map();
@@ -901,6 +1151,7 @@ async function loadMeetingPage(user) {
     const audioAnalyzers = new Map();
     const participantAudioLevels = new Map();
     const chatMessages = [];
+    const pollDraftSelections = new Map();
     const roomState = {
         participants: [],
         activeSpeaker: null,
@@ -928,7 +1179,28 @@ async function loadMeetingPage(user) {
     let transcriptText = '';
     let finalTranscriptText = '';
     let translationRequestId = 0;
+    let autoDetectedSpeechLanguage = '';
+    let languageDetectionPending = false;
     const isLocalHost = roomData?.meeting?.hostUserId === user.id;
+    const meetingSettings = {
+        muteOnEntry: true,
+        videoOffOnEntry: true,
+        allowParticipantUnmute: true,
+        allowParticipantVideo: true,
+        allowParticipantScreenShare: true,
+        allowParticipantChat: true,
+        allowParticipantRecording: false
+    };
+    const recordingState = {
+        recorder: null,
+        chunks: [],
+        stream: null,
+        micStream: null,
+        audioContext: null,
+        startedAt: 0,
+        timer: null,
+        uploading: false
+    };
     const virtualBackground = {
         enabled: false,
         busy: false,
@@ -1779,20 +2051,360 @@ async function loadMeetingPage(user) {
         }
     }
 
-    async function copyMeetingLink() {
-        const meetingLink = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(normalizeRoomCodeInput(activeRoomCode))}`;
-        if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(meetingLink);
-        } else {
-            const tempInput = document.createElement('input');
-            tempInput.value = meetingLink;
-            document.body.appendChild(tempInput);
-            tempInput.select();
-            document.execCommand('copy');
-            tempInput.remove();
+    function getMeetingLink() {
+        return `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(normalizeRoomCodeInput(activeRoomCode))}`;
+    }
+
+    async function writeToClipboard(text) {
+        if (navigator.clipboard?.writeText && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
         }
 
-        alert('Meeting link copied.');
+        const tempInput = document.createElement('input');
+        tempInput.value = text;
+        tempInput.setAttribute('readonly', '');
+        tempInput.style.position = 'fixed';
+        tempInput.style.opacity = '0';
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        tempInput.remove();
+    }
+
+    function setShareStatus(message) {
+        if (shareModalStatus) {
+            shareModalStatus.textContent = message || '';
+        }
+    }
+
+    function updateShareTargets() {
+        const meetingLink = getMeetingLink();
+        const roomCodeValue = normalizeRoomCodeInput(activeRoomCode);
+        const title = roomData.meeting.title || 'Vyom meeting';
+        const inviteText = `${user.name} is inviting you to a Vyom meeting: "${title}".\nJoin here: ${meetingLink}\nMeeting code: ${roomCodeValue}`;
+
+        if (shareLinkInput) {
+            shareLinkInput.value = meetingLink;
+        }
+        if (shareCodeInput) {
+            shareCodeInput.value = roomCodeValue;
+        }
+
+        const whatsapp = document.getElementById('share-target-whatsapp');
+        const telegram = document.getElementById('share-target-telegram');
+        const email = document.getElementById('share-target-email');
+        const post = document.getElementById('share-target-x');
+
+        if (whatsapp) {
+            whatsapp.href = `https://wa.me/?text=${encodeURIComponent(inviteText)}`;
+        }
+        if (telegram) {
+            telegram.href = `https://t.me/share/url?url=${encodeURIComponent(meetingLink)}&text=${encodeURIComponent(inviteText)}`;
+        }
+        if (email) {
+            email.href = `mailto:?subject=${encodeURIComponent(`Join my Vyom meeting: ${title}`)}&body=${encodeURIComponent(inviteText)}`;
+        }
+        if (post) {
+            post.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(inviteText)}`;
+        }
+        if (shareNativeButton) {
+            shareNativeButton.classList.toggle('is-hidden', typeof navigator.share !== 'function');
+            shareNativeButton.dataset.shareText = inviteText;
+        }
+    }
+
+    function openShareModal() {
+        updateShareTargets();
+        setShareStatus('');
+        shareModal?.classList.remove('is-hidden');
+        shareModal?.setAttribute('aria-hidden', 'false');
+        shareLinkInput?.focus();
+        shareLinkInput?.select();
+    }
+
+    function closeShareModal() {
+        shareModal?.classList.add('is-hidden');
+        shareModal?.setAttribute('aria-hidden', 'true');
+    }
+
+    async function copyMeetingLink() {
+        await writeToClipboard(getMeetingLink());
+        setShareStatus('Meeting link copied to your clipboard.');
+    }
+
+    function applyMeetingSettings(settings = {}) {
+        Object.keys(meetingSettings).forEach((key) => {
+            if (typeof settings[key] === 'boolean') {
+                meetingSettings[key] = settings[key];
+            }
+        });
+
+        Object.entries(hostSettingInputs).forEach(([key, input]) => {
+            if (input) {
+                input.checked = Boolean(meetingSettings[key]);
+            }
+        });
+
+        updateParticipantPermissionUi();
+    }
+
+    function canParticipantUnmute() {
+        return isLocalHost || meetingSettings.allowParticipantUnmute;
+    }
+
+    function canParticipantStartVideo() {
+        return isLocalHost || meetingSettings.allowParticipantVideo;
+    }
+
+    function updateParticipantPermissionUi() {
+        const lockAudio = !audioEnabled && !canParticipantUnmute();
+        if (muteToggleButton) {
+            muteToggleButton.disabled = lockAudio;
+            muteToggleButton.title = lockAudio ? 'The host has muted you and disabled self-unmute.' : '';
+        }
+
+        const lockVideo = !videoEnabled && !canParticipantStartVideo();
+        if (cameraToggleButton) {
+            cameraToggleButton.disabled = lockVideo;
+            cameraToggleButton.title = lockVideo ? 'The host has disabled starting video.' : '';
+        }
+
+        const lockShare = !isLocalHost && !meetingSettings.allowParticipantScreenShare;
+        if (screenShareButton) {
+            screenShareButton.disabled = lockShare && !screenShareStream;
+            screenShareButton.title = lockShare ? 'The host has disabled screen sharing.' : '';
+        }
+
+        const lockChat = !isLocalHost && !meetingSettings.allowParticipantChat;
+        if (chatComposer) {
+            chatComposer.classList.toggle('is-locked', lockChat);
+            chatComposer.querySelectorAll('textarea, button').forEach((control) => {
+                control.disabled = lockChat;
+            });
+        }
+
+        const lockRecording = !isLocalHost && !meetingSettings.allowParticipantRecording;
+        if (recordMeetingButton) {
+            recordMeetingButton.disabled = lockRecording && !recordingState.recorder;
+        }
+        if (recordMeetingHint && lockRecording && !recordingState.recorder) {
+            recordMeetingHint.textContent = 'Host has disabled recording';
+        }
+    }
+
+    function emitHostSettings() {
+        if (!isLocalHost) {
+            return;
+        }
+
+        const patch = {};
+        Object.entries(hostSettingInputs).forEach(([key, input]) => {
+            if (input) {
+                patch[key] = Boolean(input.checked);
+                meetingSettings[key] = patch[key];
+            }
+        });
+
+        socket.emit('meeting:update-room-settings', { roomCode: activeRoomCode, settings: patch });
+        updateParticipantPermissionUi();
+    }
+
+    function sendHostCommand(action, targetSocketId = null) {
+        if (!isLocalHost) {
+            return;
+        }
+
+        socket.emit('meeting:host-command', { roomCode: activeRoomCode, action, targetSocketId });
+    }
+
+    function formatClock(totalSeconds) {
+        const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const seconds = String(Math.floor(totalSeconds % 60)).padStart(2, '0');
+        return `${minutes}:${seconds}`;
+    }
+
+    function updateRecordingUi() {
+        const isRecording = Boolean(recordingState.recorder);
+        recordingIndicator?.classList.toggle('is-hidden', !isRecording);
+        if (recordMeetingButton) {
+            recordMeetingButton.classList.toggle('is-active', isRecording);
+            const label = recordMeetingButton.querySelector('strong');
+            if (label) {
+                label.textContent = isRecording ? 'Stop recording' : 'Record';
+            }
+        }
+        if (recordMeetingHint) {
+            if (recordingState.uploading) {
+                recordMeetingHint.textContent = 'Saving to your history...';
+            } else if (isRecording) {
+                recordMeetingHint.textContent = 'Recording in progress';
+            } else if (!isLocalHost && !meetingSettings.allowParticipantRecording) {
+                recordMeetingHint.textContent = 'Host has disabled recording';
+            } else {
+                recordMeetingHint.textContent = 'Save to your history';
+            }
+        }
+    }
+
+    function pickRecordingMimeType() {
+        const candidates = [
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp8,opus',
+            'video/webm'
+        ];
+
+        return candidates.find((type) => window.MediaRecorder?.isTypeSupported?.(type)) || '';
+    }
+
+    async function uploadRecording(blob, durationSeconds) {
+        recordingState.uploading = true;
+        updateRecordingUi();
+
+        try {
+            const response = await fetch(
+                buildBackendUrl(`/api/meetings/${encodeURIComponent(activeRoomCode)}/recordings`),
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'video/webm',
+                        Authorization: `Bearer ${getStoredToken()}`,
+                        'X-Vyom-Recording-Name': `${roomData.meeting.title} ${new Date().toLocaleString()}`.replace(/[^\w\s.-]/g, ''),
+                        'X-Vyom-Recording-Duration': String(Math.round(durationSeconds))
+                    },
+                    body: blob
+                }
+            );
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.message || 'Unable to save the recording.');
+            }
+
+            alert('Recording saved. You can download it from your dashboard under Recordings.');
+        } catch (error) {
+            alert(error.message || 'Unable to save the recording.');
+        } finally {
+            recordingState.uploading = false;
+            updateRecordingUi();
+        }
+    }
+
+    function cleanupRecordingStreams() {
+        recordingState.stream?.getTracks().forEach((track) => track.stop());
+        recordingState.micStream?.getTracks().forEach((track) => track.stop());
+        recordingState.audioContext?.close().catch(() => {});
+        recordingState.stream = null;
+        recordingState.micStream = null;
+        recordingState.audioContext = null;
+    }
+
+    async function startMeetingRecording() {
+        if (recordingState.recorder) {
+            return;
+        }
+
+        if (!window.MediaRecorder || !navigator.mediaDevices?.getDisplayMedia) {
+            alert('Recording is not supported in this browser.');
+            return;
+        }
+
+        if (!isLocalHost && !meetingSettings.allowParticipantRecording) {
+            alert('The host has disabled recording for participants.');
+            return;
+        }
+
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { frameRate: 30 },
+            audio: true
+        });
+
+        const audioTracks = [];
+        let mixedAudioTrack = null;
+
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const destination = audioContext.createMediaStreamDestination();
+            let hasAudioSource = false;
+
+            if (displayStream.getAudioTracks().length) {
+                audioContext.createMediaStreamSource(new MediaStream(displayStream.getAudioTracks())).connect(destination);
+                hasAudioSource = true;
+            }
+
+            const micTracks = localStream?.getAudioTracks() || [];
+            if (micTracks.length) {
+                recordingState.micStream = new MediaStream([micTracks[0].clone()]);
+                audioContext.createMediaStreamSource(recordingState.micStream).connect(destination);
+                hasAudioSource = true;
+            }
+
+            if (hasAudioSource) {
+                recordingState.audioContext = audioContext;
+                mixedAudioTrack = destination.stream.getAudioTracks()[0];
+            } else {
+                await audioContext.close().catch(() => {});
+            }
+        } catch (error) {
+            console.warn('Recording audio mix failed:', error.message);
+        }
+
+        if (mixedAudioTrack) {
+            audioTracks.push(mixedAudioTrack);
+        } else {
+            audioTracks.push(...displayStream.getAudioTracks());
+        }
+
+        const recordingStream = new MediaStream([...displayStream.getVideoTracks(), ...audioTracks]);
+        const mimeType = pickRecordingMimeType();
+        const recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : undefined);
+
+        recordingState.stream = displayStream;
+        recordingState.chunks = [];
+        recordingState.recorder = recorder;
+        recordingState.startedAt = Date.now();
+
+        recorder.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) {
+                recordingState.chunks.push(event.data);
+            }
+        };
+
+        recorder.onstop = async () => {
+            const durationSeconds = (Date.now() - recordingState.startedAt) / 1000;
+            const blob = new Blob(recordingState.chunks, { type: 'video/webm' });
+            recordingState.chunks = [];
+            recordingState.recorder = null;
+            clearInterval(recordingState.timer);
+            recordingState.timer = null;
+            cleanupRecordingStreams();
+            updateRecordingUi();
+
+            if (blob.size > 0) {
+                await uploadRecording(blob, durationSeconds);
+            }
+        };
+
+        displayStream.getVideoTracks()[0]?.addEventListener('ended', () => {
+            stopMeetingRecording();
+        });
+
+        recorder.start(1000);
+        recordingState.timer = setInterval(() => {
+            if (recordingTimerElement) {
+                recordingTimerElement.textContent = formatClock((Date.now() - recordingState.startedAt) / 1000);
+            }
+        }, 500);
+        if (recordingTimerElement) {
+            recordingTimerElement.textContent = '00:00';
+        }
+        updateRecordingUi();
+    }
+
+    function stopMeetingRecording() {
+        if (recordingState.recorder && recordingState.recorder.state !== 'inactive') {
+            recordingState.recorder.stop();
+        }
     }
 
     function wireDrawerSwipeToClose(drawerElement, drawerName) {
@@ -1874,6 +2486,16 @@ async function loadMeetingPage(user) {
             const speaking = getPeerKey(roomState.activeSpeaker) === getPeerKey(participant);
             const micIcon = participant.audioEnabled ? '🎙️' : '🔇';
             const cameraIcon = participant.videoEnabled ? '📷' : '🚫';
+            const showHostActions = isLocalHost && participant.socketId && !isSelfParticipant(participant);
+            const hostActions = showHostActions
+                ? `
+                    <div class="participant-row__host-actions">
+                        <button class="mini-action-button" type="button" data-host-action="mute" data-target-socket="${escapeHtml(participant.socketId)}" title="Mute participant" aria-label="Mute ${escapeHtml(participant.name)}">🔇</button>
+                        <button class="mini-action-button" type="button" data-host-action="video-off" data-target-socket="${escapeHtml(participant.socketId)}" title="Turn off participant video" aria-label="Turn off video for ${escapeHtml(participant.name)}">🚫</button>
+                        <button class="mini-action-button" type="button" data-host-action="remove" data-target-socket="${escapeHtml(participant.socketId)}" title="Remove from meeting" aria-label="Remove ${escapeHtml(participant.name)}">⛔</button>
+                    </div>
+                `
+                : '';
             return `
                 <div class="participant-row ${speaking ? 'is-speaking' : ''}">
                     <div>
@@ -1884,10 +2506,129 @@ async function loadMeetingPage(user) {
                         <span>${participant.isHost ? 'Host' : 'Member'}</span>
                         <span>${micIcon}</span>
                         <span>${cameraIcon}</span>
+                        ${hostActions}
                     </div>
                 </div>
             `;
         }).join('');
+
+        participantsDrawerList.querySelectorAll('[data-host-action]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const action = button.dataset.hostAction;
+                const targetSocketId = button.dataset.targetSocket;
+                if (action === 'remove' && !window.confirm('Remove this participant from the meeting?')) {
+                    return;
+                }
+                sendHostCommand(action, targetSocketId);
+            });
+        });
+    }
+
+    function parsePollMessage(rawMessage) {
+        if (typeof rawMessage !== 'string' || !rawMessage.startsWith('[POLL]: ')) {
+            return null;
+        }
+
+        try {
+            const poll = JSON.parse(rawMessage.slice(8));
+            if (!poll || !Array.isArray(poll.options) || poll.options.length < 2) {
+                return null;
+            }
+
+            poll.votes = Array.from({ length: poll.options.length }, (_, index) => Number(poll.votes?.[index] || 0));
+            poll.voters = Array.isArray(poll.voters) ? poll.voters : [];
+            return poll;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function getPollSelections(messageId, poll) {
+        if (pollDraftSelections.has(messageId)) {
+            return pollDraftSelections.get(messageId);
+        }
+
+        const myVote = poll.voters.find((voter) => voter.userId === user.id);
+        return new Set(myVote?.selections || []);
+    }
+
+    function renderPollCard(item, poll) {
+        const respondentCount = poll.voters.length;
+        const myVote = poll.voters.find((voter) => voter.userId === user.id);
+        const selections = getPollSelections(item.id, poll);
+        const canManagePoll = isLocalHost || poll.createdBy === user.id || item.author.id === user.id;
+        const inputType = poll.selectionMode === 'multi' ? 'checkbox' : 'radio';
+
+        const optionsMarkup = poll.options.map((option, index) => {
+            const isSelected = selections.has(index);
+            const voteCount = poll.votes[index];
+            const percentage = respondentCount ? Math.round((voteCount / respondentCount) * 100) : 0;
+
+            // Only the host sees live tallies so participants are not influenced by running results.
+            const resultsMarkup = isLocalHost
+                ? `
+                    <div class="poll-option__result">
+                        <div class="poll-option__bar"><span style="width:${percentage}%"></span></div>
+                        <div class="poll-option__numbers">
+                            <strong>${percentage}%</strong>
+                            <span>${voteCount} vote${voteCount === 1 ? '' : 's'}</span>
+                        </div>
+                    </div>
+                `
+                : '';
+
+            return `
+                <label class="poll-option ${isSelected ? 'is-selected' : ''} ${poll.closed ? 'is-disabled' : ''}">
+                    <span class="poll-option__control">
+                        <input type="${inputType}" name="poll-${item.id}" value="${index}" ${isSelected ? 'checked' : ''} ${poll.closed ? 'disabled' : ''}>
+                        <span class="poll-option__label">${escapeHtml(option)}</span>
+                    </span>
+                    ${resultsMarkup}
+                </label>
+            `;
+        }).join('');
+
+        const votersMarkup = isLocalHost && respondentCount
+            ? `
+                <details class="poll-voters">
+                    <summary>Who responded (${respondentCount})</summary>
+                    ${poll.voters.map((voter) => `
+                        <div class="poll-voters__row">
+                            <strong>${escapeHtml(voter.name)}</strong>
+                            <span>${escapeHtml(voter.selections.map((index) => poll.options[index]).filter(Boolean).join(', '))}</span>
+                        </div>
+                    `).join('')}
+                </details>
+            `
+            : '';
+
+        const statusMarkup = poll.closed
+            ? '<span class="poll-card__status is-closed">Voting closed</span>'
+            : myVote
+                ? '<span class="poll-card__status is-voted">✓ Your answer is recorded</span>'
+                : '';
+
+        const actionsMarkup = `
+            <div class="poll-card__actions">
+                ${poll.closed ? '' : `<button class="primary-button poll-vote-button" type="button" data-poll-id="${item.id}">${myVote ? 'Update vote' : 'Submit vote'}</button>`}
+                ${canManagePoll ? `<button class="secondary-button poll-toggle-button" type="button" data-poll-id="${item.id}" data-poll-closed="${poll.closed ? 'true' : 'false'}">${poll.closed ? 'Reopen poll' : 'Close poll'}</button>` : ''}
+            </div>
+        `;
+
+        return `
+            <div class="chat-message__bubble poll-card ${poll.closed ? 'is-closed' : ''}" data-poll-card="${item.id}">
+                <div class="poll-card__head">
+                    <span class="poll-card__badge">Poll</span>
+                    <span class="poll-card__mode">${poll.selectionMode === 'multi' ? 'Choose multiple' : 'Choose one'}</span>
+                    ${isLocalHost ? `<span class="poll-card__count">${respondentCount} response${respondentCount === 1 ? '' : 's'}</span>` : ''}
+                </div>
+                <p class="poll-card__question">${escapeHtml(poll.question)}</p>
+                <div class="poll-options" data-poll-id="${item.id}">${optionsMarkup}</div>
+                ${statusMarkup}
+                ${votersMarkup}
+                ${actionsMarkup}
+            </div>
+        `;
     }
 
     function renderChatDrawer() {
@@ -1902,40 +2643,20 @@ async function loadMeetingPage(user) {
 
         chatMessageList.innerHTML = chatMessages.map((item) => {
             const isSelf = item.author.email === user.email;
-            const attachmentMessage = parseAttachmentMessage(item.message);
+            const poll = parsePollMessage(item.message);
 
             let bubble = '';
-            if (item.message.startsWith('[POLL]: ')) {
-                try {
-                    const pollData = JSON.parse(item.message.slice(8));
-                    bubble = `
-                        <div class="chat-message__bubble chat-message__poll" style="background-color: var(--color-gray-100); border: 1px solid var(--color-gray-300);">
-                                    <strong>📊 ${escapeHtml(pollData.question)}</strong>
-                                    <span class="chat-message__poll-mode">${pollData.selectionMode === 'multi' ? 'Choose multiple' : 'Choose one'}</span>
-                                    <div class="poll-options" data-poll-id="${item.id}">
-                                        ${pollData.options.map((opt, i) => `
-                                            <label class="poll-option">
-                                                <input type="${pollData.selectionMode === 'multi' ? 'checkbox' : 'radio'}" name="poll-${item.id}" value="${i}">
-                                                <span>${escapeHtml(opt)}</span>
-                                                ${roomData.meeting.hostUserId === user.id ? `<span class="control-badge poll-vote-count">${pollData.votes?.[i] || 0}</span>` : ''}
-                                            </label>
-                                        `).join('')}
-                                        <button class="secondary-button poll-vote-button" type="button" data-poll-id="${item.id}">Vote</button>
-                            </div>
-                                    ${roomData.meeting.hostUserId === user.id && pollData.voters?.length ? `<div class="poll-voters"><strong>Responses</strong>${pollData.voters.map((voter) => `<div>${escapeHtml(voter.name)}: ${escapeHtml(voter.selections.map((index) => pollData.options[index]).join(', '))}</div>`).join('')}</div>` : ''}
-                        </div>
-                    `;
-                } catch(e) {
-                    bubble = `<div class="chat-message__bubble">${escapeHtml(item.message)}</div>`;
-                }
+            if (poll) {
+                bubble = renderPollCard(item, poll);
             } else {
+                const attachmentMessage = parseAttachmentMessage(item.message);
                 bubble = attachmentMessage
                     ? renderAttachmentCard(attachmentMessage, isSelf)
                     : `<div class="chat-message__bubble">${escapeHtml(item.message)}</div>`;
             }
 
             return `
-                <div class="chat-message ${isSelf ? 'chat-message--self' : ''}">
+                <div class="chat-message ${isSelf ? 'chat-message--self' : ''} ${poll ? 'chat-message--poll' : ''}">
                     <div class="chat-message__name">${escapeHtml(item.author.name)}</div>
                     ${bubble}
                     <div class="chat-message__meta">${formatDateTime(item.createdAt)}</div>
@@ -1947,18 +2668,43 @@ async function loadMeetingPage(user) {
             chatMessageList.scrollTop = chatMessageList.scrollHeight;
         }
 
+        chatMessageList.querySelectorAll('.poll-options input').forEach((input) => {
+            input.addEventListener('change', () => {
+                const container = input.closest('.poll-options');
+                const messageId = Number(container.dataset.pollId);
+                const selected = Array.from(container.querySelectorAll('input:checked')).map((checked) => Number(checked.value));
+                pollDraftSelections.set(messageId, new Set(selected));
+                container.querySelectorAll('.poll-option').forEach((option, index) => {
+                    option.classList.toggle('is-selected', selected.includes(index));
+                });
+            });
+        });
+
         chatMessageList.querySelectorAll('.poll-vote-button').forEach((button) => {
             button.addEventListener('click', () => {
-                const pollOptions = chatMessageList.querySelector(`[data-poll-id="${button.dataset.pollId}"]`);
-                const selections = Array.from(pollOptions.querySelectorAll('input:checked')).map((input) => Number(input.value));
+                const messageId = Number(button.dataset.pollId);
+                const container = chatMessageList.querySelector(`.poll-options[data-poll-id="${messageId}"]`);
+                const selections = Array.from(container?.querySelectorAll('input:checked') || []).map((input) => Number(input.value));
                 if (!selections.length) {
-                    alert('Choose at least one option.');
+                    showMeetingToast('Choose at least one option before voting.');
                     return;
                 }
+
+                button.disabled = true;
                 socket.emit('meeting:poll-vote', {
                     roomCode: activeRoomCode,
-                    messageId: Number(button.dataset.pollId),
+                    messageId,
                     selections
+                });
+            });
+        });
+
+        chatMessageList.querySelectorAll('.poll-toggle-button').forEach((button) => {
+            button.addEventListener('click', () => {
+                socket.emit('meeting:poll-close', {
+                    roomCode: activeRoomCode,
+                    messageId: Number(button.dataset.pollId),
+                    closed: button.dataset.pollClosed !== 'true'
                 });
             });
         });
@@ -2274,7 +3020,6 @@ async function loadMeetingPage(user) {
 
     function renderMeetingState() {
         renderParticipantTiles();
-        renderChatDrawer();
         updateScreenShareButtonLabel();
         document.querySelectorAll('video').forEach((mediaElement) => {
             applySpeakerOutputToElement(mediaElement);
@@ -2383,6 +3128,7 @@ async function loadMeetingPage(user) {
         if (shouldEmit) {
             pushStatePatch({ audioEnabled });
         }
+        updateParticipantPermissionUi();
         renderMeetingState();
     }
 
@@ -2404,6 +3150,7 @@ async function loadMeetingPage(user) {
         if (shouldEmit) {
             pushStatePatch({ videoEnabled });
         }
+        updateParticipantPermissionUi();
         renderMeetingState();
     }
 
@@ -2411,6 +3158,100 @@ async function loadMeetingPage(user) {
         activeRoomCode = '';
         window.removeEventListener('popstate', handleMeetingBackNavigation);
         window.location.replace('dashboard.html');
+    }
+
+    const SPEECH_LANGUAGE_BY_CODE = {
+        en: 'en-US',
+        hi: 'hi-IN',
+        es: 'es-ES',
+        fr: 'fr-FR',
+        de: 'de-DE',
+        pt: 'pt-BR',
+        it: 'it-IT',
+        ja: 'ja-JP',
+        ko: 'ko-KR',
+        zh: 'zh-CN',
+        ar: 'ar-SA',
+        ru: 'ru-RU',
+        bn: 'bn-IN',
+        ta: 'ta-IN',
+        te: 'te-IN',
+        mr: 'mr-IN',
+        gu: 'gu-IN',
+        pa: 'pa-IN',
+        ur: 'ur-IN',
+        nl: 'nl-NL',
+        tr: 'tr-TR',
+        id: 'id-ID'
+    };
+
+    function isAutoLanguageDetection() {
+        return (captionsLanguageSelect?.value || 'auto') === 'auto';
+    }
+
+    function resolveSpeechLanguage() {
+        if (!isAutoLanguageDetection()) {
+            return captionsLanguageSelect.value;
+        }
+
+        return autoDetectedSpeechLanguage || navigator.language || 'en-US';
+    }
+
+    function describeDetectedLanguage(languageTag) {
+        if (!captionsDetectedLanguage) {
+            return;
+        }
+
+        if (!isAutoLanguageDetection()) {
+            captionsDetectedLanguage.textContent = '';
+            return;
+        }
+
+        let label = languageTag;
+        try {
+            label = new Intl.DisplayNames([navigator.language || 'en'], { type: 'language' }).of(languageTag) || languageTag;
+        } catch (error) {
+            // Fall back to the raw tag when Intl.DisplayNames is unavailable.
+        }
+
+        captionsDetectedLanguage.textContent = `Auto detected: ${label}`;
+    }
+
+    // Detects the spoken language from the transcript so recognition can retune itself mid-meeting.
+    async function detectTranscriptLanguage(text) {
+        const sample = String(text || '').trim();
+        if (!isCaptionsEnabled || !isAutoLanguageDetection() || languageDetectionPending || sample.length < 12) {
+            return;
+        }
+
+        languageDetectionPending = true;
+        try {
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(sample.slice(-240))}`;
+            const response = await fetch(url);
+            if (!response.ok) {
+                return;
+            }
+
+            const data = await response.json();
+            const detectedCode = String(data?.[2] || '').split('-')[0].toLowerCase();
+            const nextLanguage = SPEECH_LANGUAGE_BY_CODE[detectedCode];
+            if (!nextLanguage) {
+                return;
+            }
+
+            describeDetectedLanguage(nextLanguage);
+            if (nextLanguage !== autoDetectedSpeechLanguage) {
+                autoDetectedSpeechLanguage = nextLanguage;
+                if (recognition && isCaptionsEnabled) {
+                    recognition.lang = nextLanguage;
+                    recognition.stop();
+                }
+            }
+        } catch (error) {
+            console.warn('Language detection failed:', error.message);
+        } finally {
+            languageDetectionPending = false;
+        }
     }
 
     async function translateTranscript(text) {
@@ -2461,11 +3302,48 @@ async function loadMeetingPage(user) {
             meetingSubtitle.textContent = `${state.teamName} • ${state.roomCode}`;
         }
         roomState.activeSpeaker = null;
+        if (state?.settings) {
+            applyMeetingSettings(state.settings);
+        }
+        if (state?.entryState) {
+            applyAudioToggle(Boolean(state.entryState.audioEnabled), false);
+            applyVideoToggle(Boolean(state.entryState.videoEnabled) && Boolean(localStream), false);
+            if (!state.entryState.audioEnabled || !state.entryState.videoEnabled) {
+                showMeetingToast('You joined with the host\'s entry settings applied.');
+            }
+        }
         if (state?.whiteboard?.strokes) {
             roomState.whiteboard.strokes = state.whiteboard.strokes;
             redrawWhiteboardCanvas();
         }
         renderMeetingState();
+    });
+
+    socket.on('meeting:room-settings', ({ settings } = {}) => {
+        applyMeetingSettings(settings || {});
+    });
+
+    socket.on('meeting:host-action', ({ action, hostName } = {}) => {
+        const host = hostName || 'The host';
+        if (action === 'mute') {
+            applyAudioToggle(false);
+            showMeetingToast(`${host} muted you.`);
+            return;
+        }
+        if (action === 'video-off') {
+            applyVideoToggle(false);
+            showMeetingToast(`${host} turned off your video.`);
+            return;
+        }
+        if (action === 'lower-hand') {
+            applyRaiseHandToggle(false);
+            return;
+        }
+        if (action === 'remove') {
+            alert(`${host} removed you from this meeting.`);
+            socket.emit('meeting:leave', { roomCode: activeRoomCode });
+            navigateToDashboardWithoutMeetingHistory();
+        }
     });
 
     socket.on('meeting:chat-history', ({ messages = [] }) => {
@@ -2565,10 +3443,14 @@ async function loadMeetingPage(user) {
     });
 
     socket.on('meeting:error', (message) => {
-        alert(message);
         if (/ended/i.test(String(message || ''))) {
+            alert(message);
             navigateToDashboardWithoutMeetingHistory();
+            return;
         }
+
+        showMeetingToast(message);
+        renderChatDrawer();
     });
 
     socket.on('meeting:ended', ({ message }) => {
@@ -2598,9 +3480,83 @@ async function loadMeetingPage(user) {
         participantsSearchInput.addEventListener('input', renderParticipantsDrawer);
     }
     if (meetingCopyLinkButton) {
-        meetingCopyLinkButton.addEventListener('click', () => {
-            copyMeetingLink().catch((error) => alert(error.message || 'Unable to copy the meeting link.'));
+        meetingCopyLinkButton.addEventListener('click', openShareModal);
+    }
+    if (shareInviteButton) {
+        shareInviteButton.addEventListener('click', () => {
+            closeMorePanel();
+            openShareModal();
         });
+    }
+    if (shareModalClose) {
+        shareModalClose.addEventListener('click', closeShareModal);
+    }
+    if (shareModal) {
+        shareModal.addEventListener('click', (event) => {
+            if (event.target === shareModal) {
+                closeShareModal();
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !shareModal.classList.contains('is-hidden')) {
+                closeShareModal();
+            }
+        });
+    }
+    if (shareCopyLinkButton) {
+        shareCopyLinkButton.addEventListener('click', () => {
+            copyMeetingLink().catch((error) => setShareStatus(error.message || 'Unable to copy the meeting link.'));
+        });
+    }
+    if (shareCopyCodeButton) {
+        shareCopyCodeButton.addEventListener('click', () => {
+            writeToClipboard(normalizeRoomCodeInput(activeRoomCode))
+                .then(() => setShareStatus('Meeting code copied to your clipboard.'))
+                .catch((error) => setShareStatus(error.message || 'Unable to copy the meeting code.'));
+        });
+    }
+    if (shareNativeButton) {
+        shareNativeButton.addEventListener('click', async () => {
+            try {
+                await navigator.share({
+                    title: roomData.meeting.title || 'Vyom meeting',
+                    text: shareNativeButton.dataset.shareText || '',
+                    url: getMeetingLink()
+                });
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    setShareStatus('Sharing was cancelled.');
+                }
+            }
+        });
+    }
+    if (recordMeetingButton) {
+        recordMeetingButton.addEventListener('click', async () => {
+            if (recordingState.recorder) {
+                stopMeetingRecording();
+                return;
+            }
+
+            try {
+                await startMeetingRecording();
+            } catch (error) {
+                if (error.name !== 'NotAllowedError') {
+                    alert(error.message || 'Unable to start recording.');
+                }
+            }
+        });
+    }
+    Object.values(hostSettingInputs).forEach((input) => {
+        input?.addEventListener('change', emitHostSettings);
+    });
+    if (hostMuteAllButton) {
+        hostMuteAllButton.addEventListener('click', () => sendHostCommand('mute'));
+    }
+    if (hostVideoOffAllButton) {
+        hostVideoOffAllButton.addEventListener('click', () => sendHostCommand('video-off'));
+    }
+    if (hostLowerHandsButton) {
+        hostLowerHandsButton.addEventListener('click', () => sendHostCommand('lower-hand'));
     }
     if (meetingFullscreenButton) {
         meetingFullscreenButton.addEventListener('click', () => {
@@ -2644,32 +3600,119 @@ async function loadMeetingPage(user) {
             imageShareInput?.click();
         });
     }
+    function renderPollOptionInputs(values = ['', '']) {
+        if (!pollOptionInputs) {
+            return;
+        }
+
+        pollOptionInputs.innerHTML = values.map((value, index) => `
+            <div class="poll-option-input">
+                <input type="text" maxlength="100" placeholder="Option ${index + 1}" value="${escapeHtml(value)}" data-poll-option-index="${index}">
+                <button class="mini-action-button" type="button" data-remove-option="${index}" aria-label="Remove option ${index + 1}" ${values.length <= 2 ? 'disabled' : ''}>✕</button>
+            </div>
+        `).join('');
+
+        pollOptionInputs.querySelectorAll('[data-remove-option]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const current = readPollOptionInputs();
+                current.splice(Number(button.dataset.removeOption), 1);
+                renderPollOptionInputs(current);
+            });
+        });
+    }
+
+    function readPollOptionInputs() {
+        return Array.from(pollOptionInputs?.querySelectorAll('input') || []).map((input) => input.value);
+    }
+
+    function openPollModal() {
+        if (!isLocalHost && !meetingSettings.allowParticipantChat) {
+            showMeetingToast('The host has disabled chat and polls for participants.');
+            return;
+        }
+
+        if (pollQuestionInput) {
+            pollQuestionInput.value = '';
+            pollQuestionInput.classList.remove('is-invalid');
+        }
+        const singleMode = pollForm?.querySelector('input[name="poll-selection-mode"][value="single"]');
+        if (singleMode) {
+            singleMode.checked = true;
+        }
+        renderPollOptionInputs(['', '']);
+        setFieldError('poll-form-error', '');
+        pollModal?.classList.remove('is-hidden');
+        pollModal?.setAttribute('aria-hidden', 'false');
+        pollQuestionInput?.focus();
+    }
+
+    function closePollModal() {
+        pollModal?.classList.add('is-hidden');
+        pollModal?.setAttribute('aria-hidden', 'true');
+    }
+
     if (chatCreatePollButton) {
-        chatCreatePollButton.addEventListener('click', () => {
-            const question = prompt('Enter your poll question:')?.trim();
-            if (!question) return;
-            const quantity = Math.min(8, Math.max(2, Number(prompt('How many options? (2-8)', '3')) || 0));
-            if (!quantity) return;
-            const options = Array.from({ length: quantity }, (_, index) => prompt(`Option ${index + 1}:`)?.trim()).filter(Boolean);
-            if (options.length < 2) {
-                alert('A poll needs at least two options.');
+        chatCreatePollButton.addEventListener('click', openPollModal);
+    }
+    if (pollAddOptionButton) {
+        pollAddOptionButton.addEventListener('click', () => {
+            const current = readPollOptionInputs();
+            if (current.length >= 8) {
+                setFieldError('poll-form-error', 'A poll can have up to 8 options.');
                 return;
             }
-            const selectionMode = prompt('Type single for one choice or multi for multiple choices:', 'single')?.trim().toLowerCase() === 'multi' ? 'multi' : 'single';
-            if (question && options.length >= 2) {
-                const pollData = JSON.stringify({
-                    type: 'poll',
-                    question,
-                    options,
-                    selectionMode,
-                    votes: options.map(() => 0),
-                    voters: []
-                });
-                socket.emit('meeting:chat-message', {
-                    roomCode: activeRoomCode,
-                    message: `[POLL]: ${pollData}`
-                });
+            renderPollOptionInputs([...current, '']);
+            const inputs = pollOptionInputs?.querySelectorAll('input');
+            inputs?.[inputs.length - 1]?.focus();
+        });
+    }
+    pollModalClose?.addEventListener('click', closePollModal);
+    pollCancelButton?.addEventListener('click', closePollModal);
+    pollModal?.addEventListener('click', (event) => {
+        if (event.target === pollModal) {
+            closePollModal();
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && pollModal && !pollModal.classList.contains('is-hidden')) {
+            closePollModal();
+        }
+    });
+    if (pollForm) {
+        pollForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            setFieldError('poll-form-error', '');
+
+            const question = pollQuestionInput?.value.trim();
+            if (!question) {
+                setFieldError('poll-form-error', 'Enter a question for your poll.', pollQuestionInput);
+                pollQuestionInput?.focus();
+                return;
             }
+
+            const options = readPollOptionInputs().map((value) => value.trim()).filter(Boolean);
+            if (options.length < 2) {
+                setFieldError('poll-form-error', 'Add at least two non-empty options.');
+                return;
+            }
+
+            if (new Set(options.map((option) => option.toLowerCase())).size !== options.length) {
+                setFieldError('poll-form-error', 'Poll options must be unique.');
+                return;
+            }
+
+            const selectionMode = pollForm.querySelector('input[name="poll-selection-mode"]:checked')?.value === 'multi'
+                ? 'multi'
+                : 'single';
+
+            socket.emit('meeting:chat-message', {
+                roomCode: activeRoomCode,
+                message: `[POLL]: ${JSON.stringify({ type: 'poll', question, options, selectionMode })}`
+            });
+
+            closePollModal();
+            setDrawerState('chat', true);
+            showMeetingToast('Poll launched in chat.');
         });
     }
     if (downloadAttendanceButton) {
@@ -2704,7 +3747,8 @@ async function loadMeetingPage(user) {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (SpeechRecognition) {
                     recognition = new SpeechRecognition();
-                    recognition.lang = captionsLanguageSelect?.value || 'en-US';
+                    recognition.lang = resolveSpeechLanguage();
+                    describeDetectedLanguage(recognition.lang);
                     recognition.continuous = true;
                     recognition.interimResults = true;
                     recognition.onresult = (event) => {
@@ -2719,12 +3763,14 @@ async function loadMeetingPage(user) {
                         transcriptText = `${finalTranscriptText} ${interimTranscript}`.trim();
                         if (captionsOverlay) captionsOverlay.textContent = transcriptText || 'Listening...';
                         translateTranscript(transcriptText);
+                        detectTranscriptLanguage(finalTranscriptText || transcriptText);
                     };
                     recognition.onerror = (event) => {
                         if (captionsOverlay) captionsOverlay.textContent = `Transcription error: ${event.error}`;
                     };
                     recognition.onend = () => {
                         if (isCaptionsEnabled) {
+                            recognition.lang = resolveSpeechLanguage();
                             try { recognition.start(); } catch (error) { /* Browser may already be restarting. */ }
                         }
                     };
@@ -2738,8 +3784,12 @@ async function loadMeetingPage(user) {
     }
     if (captionsLanguageSelect) {
         captionsLanguageSelect.addEventListener('change', () => {
+            autoDetectedSpeechLanguage = '';
+            if (captionsDetectedLanguage) {
+                captionsDetectedLanguage.textContent = isAutoLanguageDetection() ? 'Auto detecting language...' : '';
+            }
             if (recognition && isCaptionsEnabled) {
-                recognition.lang = captionsLanguageSelect.value;
+                recognition.lang = resolveSpeechLanguage();
                 recognition.stop();
             }
         });
@@ -2817,6 +3867,10 @@ async function loadMeetingPage(user) {
     if (chatComposer) {
         chatComposer.addEventListener('submit', (event) => {
             event.preventDefault();
+            if (!isLocalHost && !meetingSettings.allowParticipantChat) {
+                showMeetingToast('The host has disabled chat for participants.');
+                return;
+            }
             const message = chatMessageInput?.value.trim();
             if (!message) {
                 return;
@@ -2880,6 +3934,10 @@ async function loadMeetingPage(user) {
                 stopScreenShare();
                 return;
             }
+            if (!isLocalHost && !meetingSettings.allowParticipantScreenShare) {
+                showMeetingToast('The host has disabled screen sharing for participants.');
+                return;
+            }
             await startScreenShare('screen');
         });
     }
@@ -2892,6 +3950,12 @@ async function loadMeetingPage(user) {
 
     if (leaveMeetingButton) {
         leaveMeetingButton.addEventListener('click', async () => {
+            if (recordingState.recorder) {
+                stopMeetingRecording();
+                showMeetingToast('Saving your recording before you leave...');
+                await new Promise((resolve) => setTimeout(resolve, 1200));
+            }
+
             currentRoomParticipants = [];
             roomState.participants = [];
             peerConnections.forEach((connection, remoteSocketId) => {
@@ -2945,6 +4009,12 @@ async function loadMeetingPage(user) {
     }
     closeMeetingSidePanels();
     closeWhiteboard();
+    closeShareModal();
+    closePollModal();
+    hostControlsSection?.classList.toggle('is-hidden', !isLocalHost);
+    applyMeetingSettings(meetingSettings);
+    updateShareTargets();
+    updateRecordingUi();
     updateScreenShareButtonLabel();
     updateWhiteboardToolbar();
     generateAiSuggestions();
@@ -2956,6 +4026,7 @@ async function loadMeetingPage(user) {
 
 async function loadDashboardPage(user) {
     let dashboardData = await requestJson('/api/dashboard');
+    let recordings = [];
     let currentWorkspaceView = 'dashboard';
 
     const userName = document.getElementById('dashboard-user-name');
@@ -2986,6 +4057,7 @@ async function loadDashboardPage(user) {
     const dashboardOverview = document.getElementById('dashboard-overview');
     const upcomingSection = document.querySelector('.upcoming-section');
     const historyPanel = document.querySelector('.history-panel');
+    const recordingsPanel = document.getElementById('recordings-panel');
     let profileAvatarDataUrl = dashboardData.profile.avatarUrl || '';
 
     function ensureWorkspacePanel() {
@@ -3082,6 +4154,21 @@ async function loadDashboardPage(user) {
         renderTeamList(dashboardData.teams);
         renderUpcomingMeetings(dashboardData.upcomingMeetings);
         renderMeetingHistory(dashboardData.meetingHistory);
+        await refreshRecordings();
+    }
+
+    async function refreshRecordings() {
+        try {
+            const response = await requestJson('/api/recordings');
+            recordings = response.recordings || [];
+        } catch (error) {
+            recordings = [];
+        }
+
+        renderRecordingRows(recordings, document.getElementById('recordings-body'), refreshRecordings);
+        if (currentWorkspaceView === 'recordings') {
+            renderRecordingsWorkspace();
+        }
     }
 
     async function joinRoomAndRedirect(roomCode) {
@@ -3261,6 +4348,25 @@ async function loadDashboardPage(user) {
         });
     }
 
+    function renderRecordingsWorkspace() {
+        if (!workspacePanel) {
+            return;
+        }
+
+        workspacePanel.innerHTML = `
+            <div class="section-header"><div><h2>Recordings</h2><p>Download recordings captured during your meetings.</p></div></div>
+            <div class="empty-state-card" data-workspace-banner>Recordings are stored securely on the Vyom server.</div>
+            <div class="history-list" style="margin-top:14px;">
+                <table class="history-table">
+                    <thead><tr><th>Recording</th><th>Meeting</th><th>Recorded</th><th>Length</th><th>Size</th><th>Action</th></tr></thead>
+                    <tbody id="workspace-recordings-body"></tbody>
+                </table>
+            </div>
+        `;
+
+        renderRecordingRows(recordings, document.getElementById('workspace-recordings-body'), refreshRecordings);
+    }
+
     function renderSettingsWorkspace() {
         if (!workspacePanel) {
             return;
@@ -3310,6 +4416,9 @@ async function loadDashboardPage(user) {
         if (historyPanel) {
             historyPanel.style.display = showBase ? '' : 'none';
         }
+        if (recordingsPanel) {
+            recordingsPanel.style.display = showBase ? '' : 'none';
+        }
         if (workspacePanel) {
             workspacePanel.style.display = showBase ? 'none' : '';
         }
@@ -3329,6 +4438,8 @@ async function loadDashboardPage(user) {
             renderTeamsWorkspace();
         } else if (view === 'history') {
             renderHistoryWorkspace();
+        } else if (view === 'recordings') {
+            renderRecordingsWorkspace();
         } else if (view === 'settings') {
             renderSettingsWorkspace();
         }
@@ -3346,6 +4457,7 @@ async function loadDashboardPage(user) {
     renderTeamList(dashboardData.teams);
     renderUpcomingMeetings(dashboardData.upcomingMeetings);
     renderMeetingHistory(dashboardData.meetingHistory);
+    await refreshRecordings();
 
     if (localStorage.getItem('vyomDashboardCompactView') === 'true') {
         document.body.classList.add('dashboard-compact');

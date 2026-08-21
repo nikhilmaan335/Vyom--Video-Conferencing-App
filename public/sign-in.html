@@ -23,12 +23,16 @@
                 <p>Sign in to continue to your Vyom workspace.</p>
             </div>
 
-            <form class="authentication-form" id="sign-in-form">
+            <form class="authentication-form" id="sign-in-form" novalidate>
                 <label for="sign-in-email">Email</label>
                 <input type="email" id="sign-in-email" placeholder="Enter your email" required>
+                <p class="field-error" id="sign-in-email-error" aria-live="polite"></p>
 
                 <label for="sign-in-password">Password</label>
                 <input type="password" id="sign-in-password" placeholder="Enter your password" required>
+                <p class="field-error" id="sign-in-password-error" aria-live="polite"></p>
+
+                <p class="form-error" id="sign-in-form-error" role="alert" aria-live="assertive"></p>
 
                 <button type="submit" class="primary-button">Sign In</button>
             </form>

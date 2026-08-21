@@ -31,16 +31,19 @@
         <div class="signup-panel" id="auth-panel">
             <h3 class="section-heading">Create Account</h3>
             <p class="section-description">Fill your information below or register with your social account.</p>
-            <form action="" method="post" class="registration-form">
+            <form action="" method="post" class="registration-form" novalidate>
                 <div class="form-row">
                     <input type="text" name="fname" placeholder="First Name" required>
+                    <p class="field-error" id="signup-fname-error" aria-live="polite"></p>
                 </div>
                 <div class="form-row">
                     <input type="text" name="lname" placeholder="Last Name" required>
+                    <p class="field-error" id="signup-lname-error" aria-live="polite"></p>
                 </div>
                 <div class="form-row">
                     <label for="email">Email:</label>
                     <input type="email" name="email" placeholder="example@gmail.com" required>
+                    <p class="field-error" id="signup-email-error" aria-live="polite"></p>
                 </div>
                 <div class="form-row">
                     <label for="password">Password:</label>
@@ -48,17 +51,21 @@
                         <input type="password" name="password" id="password-input-field" placeholder="••••••••••••" required>
                         <span class="password-visibility-toggle" id="password-visibility-toggle">👁️</span>
                     </div>
+                    <p class="field-error" id="signup-password-error" aria-live="polite"></p>
                 </div>
                 <div class="form-group">
                     <label for="confirm-password">Confirm Password:</label>
                     <div class="password-row">
                         <input type="password" name="confirm-password" id="confirm-password-input-field" placeholder="••••••••••••" required>
                     </div>
+                    <p class="field-error" id="signup-confirm-password-error" aria-live="polite"></p>
                 </div>
                 <div class="agreement-row">
                     <input type="checkbox" name="terms" id="terms" required>
                     <label for="terms">Agree with <a href="#" class="terms-checkbox-link">Terms and condition</a></label>
                 </div>
+                <p class="field-error" id="signup-terms-error" aria-live="polite"></p>
+                <p class="form-error" id="signup-form-error" role="alert" aria-live="assertive"></p>
                 <button type="submit" class="primary-button">Sign Up</button>
             </form>
 
